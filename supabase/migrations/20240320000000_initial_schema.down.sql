@@ -1,0 +1,22 @@
+-- Drop all tables in reverse order of creation (to handle dependencies)
+DROP TABLE IF EXISTS journal_entries;
+DROP TABLE IF EXISTS chart_of_accounts;
+DROP TABLE IF EXISTS tax_settings;
+DROP TABLE IF EXISTS withholding_taxes;
+DROP TABLE IF EXISTS vat_returns;
+DROP TABLE IF EXISTS asset_categories;
+DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS departments;
+DROP TABLE IF EXISTS profiles;
+-- Drop the update_updated_at_column function
+DROP FUNCTION IF EXISTS update_updated_at_column();
+-- Drop all ENUM types
+DROP TYPE IF EXISTS journal_status;
+DROP TYPE IF EXISTS account_type;
+DROP TYPE IF EXISTS depreciation_method;
+DROP TYPE IF EXISTS tax_period;
+DROP TYPE IF EXISTS withholding_tax_status;
+DROP TYPE IF EXISTS vat_status;
+DROP TYPE IF EXISTS payment_status;
+DROP TYPE IF EXISTS department_status;
+DROP TYPE IF EXISTS user_role;

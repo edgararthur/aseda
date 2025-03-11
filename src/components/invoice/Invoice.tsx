@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import Select from 'react-select'
 import DatePicker from 'react-datepicker';
@@ -22,20 +22,54 @@ import 'react-toastify/dist/ReactToastify.css';
 import InvoiceForm from '@/contexts/InvoiceForm'
 import Receipt from '@/components/Receipt'
 import Header from '../layout/Header';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
 
 interface Invoice {
-    id: number;
+    id: string;
     invoicenumber: string;
-    customerid: string;
-    issueddate: string;
+    customerid: string | null;
+    date: string;
     duedate: string;
     items: { description: string; amount: number; qty: number; totalAmount: number }[];
     subtotal: number;
     taxamount: number;
     total: number;
-    status: string;
-    customer_name: string;
+    status: string | null;
+    customer_name?: string;
 }
+
+interface SupabaseInvoice {
+    id: string;
+    invoicenumber: string;
+    customerid: string | null;
+    date: string;
+    duedate: string;
+    items: { description: string; amount: number; qty: number; totalAmount: number }[] | null;
+    subtotal: number;
+    taxamount: number;
+    total: number;
+    status: string | null;
+    profiles?: {
+        full_name: string;
+    } | null;
+}
+
+interface DateRange {
+    startDate: Date | null;
+    endDate: Date | null;
+}
+
+const ErrorMessage = ({ message, onRetry }: { message: string; onRetry: () => void }) => (
+    <div className="text-center py-8">
+        <div className="mb-4 text-red-500">
+            <TriangleAlert size={32} className="mx-auto mb-2" />
+            <p className="text-sm">{message}</p>
+        </div>
+        <Button onClick={onRetry} className="bg-blue-500 text-white px-4 py-2 rounded">
+            Retry
+        </Button>
+    </div>
+);
 
 export default function Invoice() {
 	const [selectedDates, setSelectedDates] = useState<Date[]>([]);
@@ -43,12 +77,12 @@ export default function Invoice() {
 	const [filterOpen, setFilterOpen] = useState(false);
 	const [transactionOpen, setTransactionOpen] = useState(false)
 
-	const [invoices, setInvoices] = useState([]);
+	const [invoices, setInvoices] = useState<Invoice[]>([]);
 	const [newInvoice, setNewInvoice] = useState(null);
 	const [showReceipt, setShowReceipt] = useState(false);
 
 	const [showDeleteModal, setShowDeleteModal] = useState(false);
-	const [invoiceIdToDelete, setInvoiceIdToDelete] = useState<number | null>(null)
+	const [invoiceIdToDelete, setInvoiceIdToDelete] = useState<string | null>(null)
 	const [selectedInvoice, setSelectedInvoice] = useState(null)
 	const [saleToDelete, setSaleToDelete] = useState(null);
 	const [isVisible, setIsVisible] = useState(true)
@@ -58,66 +92,219 @@ export default function Invoice() {
 	// Pagination states
 	const [page, setPage] = useState(1);
 	const [totalPages, setTotalPages] = useState(1);
-	const rowsPerPage = 13;
+	const rowsPerPage = 10; // Adjust as needed
 
-	// State for new sale form
-	const [newSaleData, setNewSaleData] = useState({
-		customer_name: '',
-		reference: '',
-		date: null as Date | null,
-		sale_status: 'Pending',
-		grand_total: '',
-		paid: '',
-		due: '',
-		payment_status: 'Partial'
-	});
+	// Add loading state
+	const [loading, setLoading] = useState(true);
+
+	const printRef = useRef(null);
+
+	const [searchTerm, setSearchTerm] = useState('');
+	const [filterStatus, setFilterStatus] = useState('all');
+	const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null });
+	const [error, setError] = useState<string | null>(null);
+
+	const logRequestTime = async <T,>(name: string, fn: () => Promise<T>): Promise<T> => {
+		const startTime = performance.now();
+		try {
+			const result = await fn();
+			const endTime = performance.now();
+			console.log(`${name} took ${(endTime - startTime).toFixed(2)}ms`);
+			return result;
+		} catch (error) {
+			const endTime = performance.now();
+			console.error(`${name} failed after ${(endTime - startTime).toFixed(2)}ms:`, error);
+			throw error;
+		}
+	};
+
+	const fetchInvoices = async () => {
+		const startTime = performance.now();
+		console.log('Starting fetchInvoices...');
+		
+		try {
+			setLoading(true);
+			setError(null);
+			
+			// Build the base query
+			console.log('Building base query...');
+			const baseQuery = supabase
+				.from('invoices')
+				.select(`
+					*,
+					profiles:customerid (
+						full_name
+					)
+				`);
+
+			// Apply filters if they exist
+			if (searchTerm) {
+				baseQuery.or(`invoicenumber.ilike.%${searchTerm}%,profiles.full_name.ilike.%${searchTerm}%`);
+			}
+
+			if (filterStatus !== 'all') {
+				baseQuery.eq('status', filterStatus);
+			}
+
+			if (dateRange.startDate && dateRange.endDate) {
+				baseQuery.gte('date', dateRange.startDate.toISOString())
+					   .lte('date', dateRange.endDate.toISOString());
+			}
+
+			// Execute count query
+			console.log('Executing count query...');
+			const { data: countResult, error: countError } = await baseQuery.select('id');
+
+			if (countError) {
+				throw new Error(`Error getting count: ${countError.message}`);
+			}
+
+			const totalCount = countResult?.length || 0;
+			console.log(`Total count: ${totalCount}`);
+
+			// Calculate pagination
+			const calculatedPages = Math.max(1, Math.ceil(totalCount / rowsPerPage));
+			setTotalPages(calculatedPages);
+
+			// Adjust current page if needed
+			const currentPage = page > calculatedPages ? 1 : page;
+			if (page !== currentPage) {
+				setPage(currentPage);
+				return;
+			}
+
+			// Fetch paginated data
+			console.log('Fetching paginated data...');
+			const start = (currentPage - 1) * rowsPerPage;
+			const end = start + rowsPerPage - 1;
+
+			const { data: invoicesData, error: dataError } = await baseQuery
+				.range(start, end)
+				.order('createdat', { ascending: false });
+
+			if (dataError) {
+				throw new Error(`Error fetching data: ${dataError.message}`);
+			}
+
+			if (!Array.isArray(invoicesData) || invoicesData.length === 0) {
+				console.log('No invoice data returned');
+				setInvoices([]);
+				return;
+			}
+
+			// Transform and validate the data
+			console.log('Transforming data...');
+			const transformedInvoices: Invoice[] = invoicesData.map((invoice: SupabaseInvoice) => ({
+				id: invoice.id,
+				invoicenumber: invoice.invoicenumber,
+				customerid: invoice.customerid,
+				date: invoice.date,
+				duedate: invoice.duedate,
+				items: Array.isArray(invoice.items) ? invoice.items : [],
+				subtotal: Number(invoice.subtotal) || 0,
+				taxamount: Number(invoice.taxamount) || 0,
+				total: Number(invoice.total) || 0,
+				status: invoice.status,
+				customer_name: invoice.profiles?.full_name
+			}));
+
+			setInvoices(transformedInvoices);
+			const endTime = performance.now();
+			console.log(`fetchInvoices completed in ${(endTime - startTime).toFixed(2)}ms`);
+			
+		} catch (err) {
+			const endTime = performance.now();
+			console.error('Error in fetchInvoices:', err);
+			console.error(`Failed after ${(endTime - startTime).toFixed(2)}ms`);
+			
+			let errorMessage = 'An error occurred while fetching invoices';
+			if (err instanceof Error) {
+				if (err.message.includes('timeout')) {
+					errorMessage = 'The request timed out. Please try again.';
+				} else {
+					errorMessage = err.message;
+				}
+			}
+			
+			setError(errorMessage);
+			toast.error(errorMessage);
+			setInvoices([]);
+			setTotalPages(1);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	// Debounce search with cleanup
+	useEffect(() => {
+		const controller = new AbortController();
+		const timer = setTimeout(() => {
+			fetchInvoices();
+		}, 500);
+
+		return () => {
+			clearTimeout(timer);
+			controller.abort();
+		};
+	}, [searchTerm, filterStatus, dateRange.startDate, dateRange.endDate, page]);
+
+	const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+		setSearchTerm(e.target.value);
+		setPage(1); // Reset to first page when searching
+	};
+
+	const handleFilterStatus = (status: string) => {
+		setFilterStatus(status);
+		setPage(1);
+	};
+
+	const handleDateRangeChange = (dates: [Date | null, Date | null]) => {
+		const [start, end] = dates;
+		setDateRange({ startDate: start, endDate: end });
+		setPage(1);
+	};
+
+	const handleExportToExcel = () => {
+		try {
+			const worksheet = XLSX.utils.json_to_sheet(invoices.map(invoice => ({
+				'Invoice Number': invoice.invoicenumber,
+				'Customer': invoice.customer_name,
+				'Date': formatDate(invoice.date),
+				'Due Date': formatDate(invoice.duedate),
+				'Subtotal': invoice.subtotal,
+				'Tax Amount': invoice.taxamount,
+				'Total': invoice.total,
+				'Status': invoice.status
+			})));
+
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(workbook, worksheet, 'Invoices');
+			XLSX.writeFile(workbook, 'invoices.xlsx');
+			toast.success('Successfully exported to Excel!');
+		} catch (err) {
+			toast.error('Failed to export to Excel');
+		}
+	};
 
 	useEffect(() => {
-		fetchInvoices()
-	})
+		fetchInvoices();
+	}, [page]);
 
-	async function fetchInvoices() {
-		try {
-		  // Calculate the range for pagination
-		  const start = (page - 1) * rowsPerPage;
-		  const end = page * rowsPerPage - 1;
-	  
-		  // Fetch invoices with customer data
-		  const { data: invoicesData, error: invoicesError } = await supabase
-			.from('invoices')
-			.select('*')
-			.range(start, end);
-	  
-		  if (invoicesError) throw invoicesError;
-	  
-		  // Fetch all customers
-		  const { data: customersData, error: customersError } = await supabase
-			.from('customers')
-			.select('id, name');
-	  
-		  if (customersError) throw customersError;
-	  
-		  // Map customer names to invoices
-		  const invoicesWithCustomerNames = invoicesData.map((invoice) => {
-			const customer = customersData.find((c) => c.id === invoice.customerid);
-			return {
-			  ...invoice,
-			  customer_name: customer ? customer.name : 'None', // Fallback if customer not found
-			};
-		  });
-	  
-		  // Set the invoices state
-		  setInvoices(invoicesWithCustomerNames);
-	  
-		  // Update total pages for pagination
-		  const { count } = await supabase.from('invoices').select('*', { count: 'exact' });
-		  if (count !== null) {
-			setTotalPages(Math.ceil(count / rowsPerPage));
-		  }
-		} catch (err) {
-		  console.error('Error fetching invoices:', err);
+	useEffect(() => {
+		let timeoutId: NodeJS.Timeout;
+		
+		if (loading) {
+			timeoutId = setTimeout(() => {
+				console.warn('Request is taking longer than expected');
+				setError('Request is taking longer than expected. The server might be slow or unavailable.');
+				setLoading(false);
+			}, 15000); // Increased timeout to 15 seconds
 		}
-	}
+		
+		return () => {
+			if (timeoutId) clearTimeout(timeoutId);
+		};
+	}, [loading]);
 
 	async function editSale(id, updates) {
 		try {
@@ -138,7 +325,7 @@ export default function Invoice() {
 		try {
 			const { data, error } = await supabase.from('invoices').delete().eq('id', id);
 			if (error) throw new Error(error.message);
-			fetchInvoices();
+			await fetchInvoices();
 			toast.success('Invoice deleted successfully!');
 		} catch (err) {
 			console.error('Error deleting invoice:', err);
@@ -156,7 +343,7 @@ export default function Invoice() {
 		editSale(sale.id, updatedSale);
 	};
 
-	const handleDeleteClick = (id: number) => {
+	const handleDeleteClick = (id: string) => {
 		setSaleToDelete(id);
 		setShowDeleteModal(true);
 	};
@@ -220,30 +407,51 @@ export default function Invoice() {
         }
     };
 
-	const handleEdit = (id: number) => {
+	const handleEdit = (id: string) => {
 		toast.info(`Edit transaction ${id}`);
 	};
 
-	const handleView = (id: number) => {
+	const handleView = (id: string) => {
 		toast.success(`View transaction ${id}`)
 	}
 
-	const handleDelete = (id: number) => {
+	const handleDelete = (id: string) => {
 		toast.error(`Delete transaction ${id}`);
 	};
 
-	// Pagination handlers
-	const handlePreviousPage = () => {
-		if (page > 1) {
-			setPage(page - 1);
-		}
+	const handleViewDetailsClick = (invoice) => {
+		setCurrentReceipt(invoice);
+		setShowReceipt(true);
 	};
 
-	const handleNextPage = () => {
-		if (page < totalPages) {
-			setPage(page + 1);
+	const handlePrintReceipt = useCallback(() => {
+		if (printRef.current) {
+			const content = printRef.current;
+			const printWindow = window.open('', '_blank');
+			if (printWindow) {
+				printWindow.document.write(`
+					<html>
+						<head>
+							<title>Print Invoice</title>
+							<style>
+								@media print {
+									body { margin: 0; padding: 20px; }
+									@page { size: auto; margin: 20mm; }
+								}
+							</style>
+						</head>
+						<body>
+							${content.innerHTML}
+						</body>
+					</html>
+				`);
+				printWindow.document.close();
+				printWindow.focus();
+				printWindow.print();
+				printWindow.close();
+			}
 		}
-	};
+	}, []);
 
 	const handleInvoiceSubmit = async (invoiceData) => {
 		try {
@@ -256,23 +464,25 @@ export default function Invoice() {
 			fetchInvoices(); // Refresh the invoices list
 		} catch (err) {
 			console.error('Error adding invoice:', err);
+			toast.error('Failed to add invoice.');
 		}
 	};
 
-	const handleViewDetailsClick = (invoice) => {
-		setCurrentReceipt(invoice);
-		setShowReceipt(true);
+	const formatDate = (dateString: string) => {
+		const options: Intl.DateTimeFormatOptions = { 
+			year: 'numeric', 
+			month: 'short', 
+			day: 'numeric' 
+		};
+		return new Date(dateString).toLocaleDateString(undefined, options);
 	};
 
-	// Add print handler
-	// Update your handlePrint function
-	const printRef = useRef(null)
-	const handlePrintReceipt = () => {
-		const element = printRef.current;
-		console.log(element)
+	// Add retry handler
+	const handleRetry = () => {
+		setError(null);
+		setLoading(true);
+		fetchInvoices();
 	};
-
-	// console.log(currentReceipt)
 
 	return (
 		<div className="flex w-dvw h-full bg-blue-50 font-poppins">
@@ -307,52 +517,26 @@ export default function Invoice() {
 								<div className="flex gap-4 mb-4">
 									<div>
 										<label className="block text-xs font-medium text-gray-700">Date Range</label>
-										<div className="flex gap-2">
-											<DatePicker
-												selected={selectedDates && selectedDates.length > 0 ? selectedDates[0] : null}
-												onChange={(dates: Date[] | null) => {
-													if (dates) {
-														setSelectedDates(dates);
-													}
-												}}
-												selectsMultiple
-												placeholderText="Select Date"
-												className="w-full px-4 py-2 outline-none"
-											/>
-											<DatePicker
-												selected={endDate}
-												onChange={(date) => setEndDate(date as unknown as Date)}
-												selectsMultiple={true}
-												placeholderText="Select Date"
-												className="border p-2 rounded bg-transparent outline-none text-xs"
-											/>
-										</div>
-									</div>
-									<div>
-										<label className="block text-xs font-medium text-gray-700">Transaction Type</label>
-										<select className="border p-2 rounded w-full bg-transparent outline-none">
-											<option>All</option>
-											<option>Income</option>
-											<option>Expense</option>
-											<option>Transfer</option>
-										</select>
-									</div>
-									<div>
-										<label className="block text-xs font-medium text-gray-700">Payment Method</label>
-										<select className="border p-2 rounded w-full bg-transparent outline-none">
-											<option>All</option>
-											<option>Cash</option>
-											<option>Bank Transfer</option>
-											<option>Credit Card</option>
-										</select>
+										<DatePicker
+											selectsRange
+											startDate={dateRange.startDate}
+											endDate={dateRange.endDate}
+											onChange={(dates) => handleDateRangeChange(dates as [Date | null, Date | null])}
+											className="border p-2 rounded bg-transparent outline-none text-xs"
+											placeholderText="Select date range"
+										/>
 									</div>
 									<div>
 										<label className="block text-xs font-medium text-gray-700">Status</label>
-										<select className="border p-2 rounded w-full bg-transparent outline-none">
-											<option>All</option>
-											<option>Pending</option>
-											<option>Completed</option>
-											<option>Canceled</option>
+										<select 
+											className="border p-2 rounded w-full bg-transparent outline-none"
+											value={filterStatus}
+											onChange={(e) => handleFilterStatus(e.target.value)}
+										>
+											<option value="all">All</option>
+											<option value="paid">Paid</option>
+											<option value="pending">Pending</option>
+											<option value="overdue">Overdue</option>
 										</select>
 									</div>
 								</div>
@@ -384,14 +568,20 @@ export default function Invoice() {
 									</button>
 									<div className='flex items-center border border-gray-300 bg-transparent rounded px-2'>
 										<Search size={16}/>
-										<input type="text" placeholder="Search by keyword" className="border-none text-gray-600 p-2 font-poppins outline-none bg-transparent text-xs font-medium" />
+										<input 
+											type="text" 
+											value={searchTerm}
+											onChange={handleSearch}
+											placeholder="Search invoices..." 
+											className="border-none text-gray-600 p-2 font-poppins outline-none bg-transparent text-xs font-medium" 
+										/>
 									</div>
 								</div>
 								<div className="flex align-middle">
 									<button onClick={handleExportToPDF} className="bg-transparent text-gray-700 border-none px-2 py-2 rounded flex items-center">
 										<FaFilePdf size={18}/>
 									</button>
-									<button onClick={handleExportToPDF} className="bg-transparent text-green-600 border-none px-2 py-2 rounded flex items-center">
+									<button onClick={handleExportToExcel} className="bg-transparent text-green-600 border-none px-2 py-2 rounded flex items-center">
 										<LuFileSpreadsheet size={18}/>
 									</button>
 									<button onClick={() => { window.print(); }} className="bg-transparent text-gray-600 border-none px-2 py-2 rounded flex items-center">
@@ -399,65 +589,84 @@ export default function Invoice() {
 									</button>
 								</div>
 							</div>
-							<table className="min-w-full rounded-lg mt-5">
-								<thead className='text-gray-500 text-xs font-medium'>
-									<tr>
-										<th className='py-2 px-4 border-b text-gray-700 font-medium'>Invoice Number</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Customer Reference</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Date</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Due Date</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Items</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Subtotal</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Tax Amount</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Total</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Status</th>
-										<th className="py-2 px-4 border-b text-gray-700 font-medium">Actions</th>
-									</tr>
-								</thead>
-								<tbody>
-								{invoices.length === 0 ? (
-									<tr>
-									<td colSpan={9} className="text-center text-xs pt-2 font-medium text-gray-700">Sorry no invoice available.</td>
-									</tr>
-								) : (
-									invoices.map((invoice, index) => (
-									<tr key={invoice.id} className='cursor-pointer text-center text-gray-500 text-xs font-norma'>
-										<td className='py-2 px-4 border-b'>{invoice.invoicenumber}</td>
-										<td className='py-2 px-4 border-b'>{invoice.customer_name}</td>
-										<td className="py-2 px-4 border-b">{invoice.issueddate}</td>
-										<td className="py-2 px-4 border-b">{invoice.duedate}</td>
-										<td className="py-2 px-4 border-b">
-											{invoice.items.map((item, index) => (
-												<div key={index} className="flex justify-between">
-													<span>{item.description}</span>
-													{/* <span>{item.qty} x ${item.cost.toFixed(2)} = ${item.amount.toFixed(2)}</span> */}
-												</div>
-											))}
-										</td>
-										<td className="py-2 px-4 border-b">{invoice.subtotal.toFixed(2)}</td>
-										<td className="py-2 px-4 border-b">{invoice.taxamount.toFixed(2)}</td>
-										<td className="py-2 px-4 border-b">{invoice.total.toFixed(2)}</td>
-										<td className="py-2 px-4 border-b">
-											<span className={`px-2 py-1 rounded capitalize ${invoice.status === 'paid' ? 'text-green-600' : 'text-red-600'}`}>
-												{invoice.status}
-											</span>
-										</td>
-										<td className="border-b">
-										<button onClick={() => handleEditSale(invoice)} className="text-blue-500 px-1 py-1 border-none bg-transparent">
-											<Edit size={16} />
-										</button>
-										<button onClick={() => handleViewDetailsClick(invoice)} className="text-gray-600 px-1 py-1 bg-white border-none bg-transparent">
-											<Eye size={16} />
-										</button>
-										<button onClick={() => handleDeleteClick(invoice.id)} className="text-red-600 px-1 py-1 bg-transparent border-none hover:bg-transparent">
-											<Trash size={16} />
-										</button>
-										</td>
-									</tr>
-									))
-								)}
-								</tbody>
-							</table>
+							{error ? (
+								<ErrorMessage message={error} onRetry={handleRetry} />
+							) : (
+								<div className="min-w-full rounded-lg mt-5">
+									{loading ? (
+										<div className="text-center py-8">
+											<LoadingSpinner />
+											{/* <p className="text-sm text-gray-500 mt-2">Loading invoices...</p> */}
+										</div>
+									) : invoices.length === 0 ? (
+										<div className="text-center py-8">
+											<p className="text-gray-500">No invoices found</p>
+											{(searchTerm || filterStatus !== 'all' || dateRange.startDate || dateRange.endDate) && (
+												<p className="text-sm text-gray-400 mt-2">
+													Try adjusting your search or filters
+												</p>
+											)}
+										</div>
+									) : (
+										<table className="min-w-full" id="invoice-table">
+											<thead className='text-gray-500 text-xs font-medium'>
+												<tr>
+													<th className='py-2 px-4 border-b text-gray-700 font-medium'>Invoice Number</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Customer Reference</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Date</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Due Date</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Items</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Subtotal</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Tax Amount</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Total</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Status</th>
+													<th className="py-2 px-4 border-b text-gray-700 font-medium">Actions</th>
+												</tr>
+											</thead>
+											<tbody>
+												{invoices.map((invoice) => (
+													<tr key={invoice.id} className='cursor-pointer text-center text-gray-500 text-xs font-normal hover:bg-gray-50'>
+														<td className='py-2 px-4 border-b'>{invoice.invoicenumber}</td>
+														<td className='py-2 px-4 border-b'>{invoice.customer_name}</td>
+														<td className="py-2 px-4 border-b">{formatDate(invoice.date)}</td>
+														<td className="py-2 px-4 border-b">{formatDate(invoice.duedate)}</td>
+														<td className="py-2 px-4 border-b">
+															{invoice.items.map((item, index) => (
+																<div key={index} className="flex justify-between">
+																	<span>{item.description}</span>
+																</div>
+															))}
+														</td>
+														<td className="py-2 px-4 border-b">{invoice.subtotal.toFixed(2)}</td>
+														<td className="py-2 px-4 border-b">{invoice.taxamount.toFixed(2)}</td>
+														<td className="py-2 px-4 border-b">{invoice.total.toFixed(2)}</td>
+														<td className="py-2 px-4 border-b">
+															<span className={`px-2 py-1 rounded capitalize ${
+																invoice.status === 'paid' ? 'text-green-600' : 
+																invoice.status === 'overdue' ? 'text-red-600' :
+																'text-yellow-600'
+															}`}>
+																{invoice.status}
+															</span>
+														</td>
+														<td className="border-b">
+															<button onClick={() => handleEditSale(invoice)} className="text-blue-500 px-1 py-1 border-none bg-transparent">
+																<Edit size={16} />
+															</button>
+															<button onClick={() => handleViewDetailsClick(invoice)} className="text-gray-600 px-1 py-1 bg-white border-none bg-transparent">
+																<Eye size={16} />
+															</button>
+															<button onClick={() => handleDeleteClick(invoice.id)} className="text-red-600 px-1 py-1 bg-transparent border-none hover:bg-transparent">
+																<Trash size={16} />
+															</button>
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									)}
+								</div>
+							)}
 
 							<footer className="flex justify-between items-center mt-4">
 								<div>
@@ -468,14 +677,14 @@ export default function Invoice() {
 								<div className="flex gap-2 pr-2">
 									<button 
 										className="px-1 py-1 bg-transparent border border-gray-700 focus:outline-none outline-none cursor-pointer text-xs" 
-										onClick={handlePreviousPage} 
+										onClick={() => setPage(prev => Math.max(prev - 1, 1))}
 										disabled={page === 1}
 									>
 										<LuChevronsLeft size={16} color='#3a3a3a'/>
 									</button>
 									<button 
 										className="px-1 py-1 bg-transparent border border-gray-700 focus:outline-none outline-none cursor-pointer text-xs" 
-										onClick={handleNextPage} 
+										onClick={() => setPage(prev => Math.min(prev + 1, totalPages))} 
 										disabled={page === totalPages}
 									>
 										<LuChevronsRight size={16} color='#3a3a3a'/>
@@ -503,13 +712,19 @@ export default function Invoice() {
 			
 			{showReceipt && currentReceipt && (
                 <Receipt
+                    ref={printRef}
                     invoiceNumber={currentReceipt.invoicenumber}
-                    poNumber={currentReceipt.invoicenumber} // Use invoice number as PO number if not available
-                    issuedDate={currentReceipt.issueddate}
+                    poNumber={currentReceipt.invoicenumber}
+                    issuedDate={currentReceipt.date}
                     dueDate={currentReceipt.duedate}
-                    from={{ name: 'Your Company Name', address: 'Your Company Address' }} // Replace with actual data
-                    to={{ name: currentReceipt.customer_name, address: 'Customer Address' }} // Replace with actual data
-                    items={currentReceipt.items}
+                    from={{ name: 'Your Company Name', address: 'Your Company Address' }}
+                    to={{ name: currentReceipt.customer_name, address: 'Customer Address' }}
+                    items={currentReceipt.items.map(item => ({
+                        description: item.description,
+                        amount: item.amount,
+                        qty: item.qty,
+                        cost: item.totalAmount
+                    }))}
                     subtotal={currentReceipt.subtotal}
                     taxAmount={currentReceipt.taxamount}
                     total={currentReceipt.total}

@@ -1,27 +1,37 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { ReactNode } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import LoadingSpinner from '../common/LoadingSpinner';
+import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
+  children: ReactNode;
+  requiredRole?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+export default function ProtectedRoute({ 
+  children, 
+  requiredRole 
+}: ProtectedRouteProps) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  // Show loading spinner while loading
   if (loading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
-  // Redirect to login if user is not authenticated
   if (!user) {
-    return <Navigate to="/auth/login" />;
+    // Redirect to login if not authenticated
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Render the children if authenticated
-  return <>{children}</>;
-};
+  if (requiredRole && user.role !== requiredRole) {
+    // Redirect to dashboard if user doesn't have required role
+    return <Navigate to="/dashboard" replace />;
+  }
 
-export default ProtectedRoute;
+  return <>{children}</>;
+}

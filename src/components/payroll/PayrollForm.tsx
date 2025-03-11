@@ -94,7 +94,7 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 
 					<h3 className="text-md font-semibold mb-2">Salary Information</h3>
 					<div className="mb-4">
-						<label className="block text-xs font-medium text-gray-800">Basic Salary <span className="text-red-500 text-lg">*</span></label>
+						<label className="block text-xs font-medium text-gray-800">Base Salary <span className="text-red-500 text-lg">*</span></label>
 						<input
 							type="number"
 							value={basicSalary}
@@ -108,7 +108,7 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 						<label className="block text-xs font-medium text-gray-800">Status <span className="text-red-500 text-lg">*</span></label>
 						<div className="flex items-center">
 							<input
-								type="radio"
+								type="checkbox"
 								value="Paid"
 								checked={status === 'Paid'}
 								onChange={() => setStatus('Paid')}
@@ -116,7 +116,7 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 							/>
 							<label className="mr-4 text-xs">Paid</label>
 							<input
-								type="radio"
+								type="checkbox"
 								value="Unpaid"
 								checked={status === 'Unpaid'}
 								onChange={() => setStatus('Unpaid')}
@@ -126,55 +126,55 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 						</div>
 					</div>
 
-					<h3 className="text-md font-semibold mb-2">Allowances</h3>
+					<h3 className="text-sm font-semibold mb-2">Allowances</h3>
 					<div className="flex align-middle gap-4 mb-4">
 						<div>
-							<label className="block text-sm font-medium text-gray-700">HRA Allowance *</label>
+							<label className="block text-xs  font-medium text-gray-700">HRA Allowance *</label>
 							<input
 								type="number"
 								value={hraAllowance}
 								onChange={(e) => setHraAllowance(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full p-2 bg-transparent outline-none border border-gray-300 rounded-md shadow-xs text-xs"
 								required
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700">Conveyance *</label>
+							<label className="block text-xs  font-medium text-gray-700">Conveyance *</label>
 							<input
 								type="number"
 								value={conveyance}
 								onChange={(e) => setConveyance(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full p-2 bg-transparent outline-none border border-gray-300 rounded-md shadow-xs text-xs"
 								required
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700">Medical Allowance *</label>
+							<label className="block text-xs  font-medium text-gray-700">Medical Allowance *</label>
 							<input
 								type="number"
 								value={medicalAllowance}
 								onChange={(e) => setMedicalAllowance(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full border p-2 bg-transparent outline-none border-gray-300 rounded-md shadow-xs text-xs"
 								required
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700">Bonus *</label>
+							<label className="block text-xs  font-medium text-gray-700">Bonus *</label>
 							<input
 								type="number"
 								value={bonus}
 								onChange={(e) => setBonus(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full border p-2 bg-transparent outline-none border-gray-300 rounded-md shadow-xs text-xs"
 								required
 							/>
 						</div>
 						<div className="col-span-2">
-							<label className="block text-sm font-medium text-gray-700">Others</label>
+							<label className="block text-xs  font-medium text-gray-700">Others</label>
 							<input
 								type="text"
 								value={othersDeductions}
 								onChange={(e) => setOthersDeductions(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full border p-1 bg-transparent outline-none border-gray-300 rounded-md shadow-xs "
 							/>
 						</div>
 					</div>
@@ -187,7 +187,7 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 								type="number"
 								value={pf}
 								onChange={(e) => setPf(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
 								required
 							/>
 						</div>
@@ -197,7 +197,7 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 								type="number"
 								value={professionalTax}
 								onChange={(e) => setProfessionalTax(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
 								required
 							/>
 						</div>
@@ -207,7 +207,7 @@ export const PayrollForm = ({ employees, onSubmit, onClose }: PayrollFormProps) 
 								type="text"
 								value={othersDeductions}
 								onChange={(e) => setOthersDeductions(e.target.value)}
-								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring focus:ring-blue-500"
+								className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
 							/>
 						</div>
 					</div>
