@@ -2,7 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { LoginForm } from '@/components/auth/LoginForm';
-import { SignupForm } from '@/components/auth/SignupForm';
+import { SignupForm } from '@/components/auth/SignUpForm';
 import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
 import { AuthCallback } from '@/components/auth/AuthCallback';
 import { Layout } from './components/layout/Layout';
