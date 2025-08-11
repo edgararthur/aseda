@@ -10,7 +10,7 @@ import * as XLSX from 'xlsx';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Plus, Filter, Edit, Trash, User, Eye, Search, TriangleAlert, File } from 'lucide-react';
+import { Plus, Filter, Edit, Trash, User, Eye, Search, AlertTriangle, File } from 'lucide-react';
 import { Sidebar } from '../layout/Sidebar';
 import { Settings, Bell } from 'lucide-react';
 import { LuChevronsLeft, LuChevronsRight, LuFileSpreadsheet, LuPrinter } from "react-icons/lu";

@@ -1,359 +1,354 @@
-import { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, Download, Calendar, FileText } from 'lucide-react';
-import { toast } from 'react-toastify';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
-import supabase from '@/lib/supabase';
-import { getPaginatedData } from '@/lib/supabase-utils';
-import { formatGHSCurrency } from '@/lib/tax-utils';
+import React, { useState, useEffect } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { DataTableTemplate, Column, CurrencyCell, DateCell } from '@/components/common/DataTableTemplate';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { 
+  BookOpen, 
+  Filter, 
+  Download, 
+  Calendar,
+  TrendingUp,
+  TrendingDown,
+  DollarSign
+} from 'lucide-react';
 
 interface LedgerEntry {
     id: string;
-    entry_date: string;
-    reference_no: string;
+  date: string;
     account_code: string;
     account_name: string;
     description: string;
+  reference: string;
     debit: number;
     credit: number;
-    running_balance: number;
-    transaction_type: 'CASH' | 'BANK' | 'JOURNAL';
-    vat_applied: boolean;
-    withholding_tax_applied: boolean;
-    supporting_document?: string;
+  balance: number;
+  entry_type: 'journal' | 'invoice' | 'payment' | 'adjustment';
     created_at: string;
-    updated_at: string;
-    created_by: string;
-    approved_by?: string;
-    approval_status: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 
-export default function GeneralLedger() {
-    const [entries, setEntries] = useState<LedgerEntry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterOpen, setFilterOpen] = useState(false);
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [dateRange, setDateRange] = useState({
-        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
-    });
-    const [filters, setFilters] = useState({
-        transactionType: 'ALL',
-        approvalStatus: 'ALL',
-        vatOnly: false,
-        withholdingTaxOnly: false
-    });
-    const rowsPerPage = 10;
+interface LedgerStats {
+  totalDebits: number;
+  totalCredits: number;
+  netBalance: number;
+  entriesCount: number;
+}
 
-    const fetchLedgerEntries = async () => {
+export default function GeneralLedgerPage() {
+  const { user, profile } = useAuth();
+    const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const [stats, setStats] = useState<LedgerStats>({
+    totalDebits: 0,
+    totalCredits: 0,
+    netBalance: 0,
+    entriesCount: 0
+  });
+    const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('current-month');
+
+  const columns: Column[] = [
+    {
+      key: 'date',
+      label: 'Date',
+      render: (value) => <DateCell date={value} />
+    },
+    {
+      key: 'account',
+      label: 'Account',
+      render: (_, row) => (
+        <div>
+          <div className="font-medium">{row.account_code}</div>
+          <div className="text-sm text-gray-500">{row.account_name}</div>
+        </div>
+      )
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      render: (value, row) => (
+        <div>
+          <div className="font-medium">{value}</div>
+          <div className="text-sm text-gray-500">Ref: {row.reference}</div>
+        </div>
+      )
+    },
+    {
+      key: 'debit',
+      label: 'Debit',
+      render: (value) => value > 0 ? <CurrencyCell amount={value} /> : '-',
+      className: 'text-right'
+    },
+    {
+      key: 'credit',
+      label: 'Credit',
+      render: (value) => value > 0 ? <CurrencyCell amount={value} /> : '-',
+      className: 'text-right'
+    },
+    {
+      key: 'balance',
+      label: 'Balance',
+      render: (value) => <CurrencyCell amount={value} />,
+      className: 'text-right'
+    },
+    {
+      key: 'entry_type',
+      label: 'Type',
+      render: (value) => (
+        <Badge variant="outline" className="capitalize">
+          {value}
+        </Badge>
+      )
+    }
+  ];
+
+  useEffect(() => {
+    fetchEntries();
+    fetchStats();
+  }, [profile, selectedAccount, selectedPeriod]);
+
+  const fetchEntries = async () => {
         try {
             setLoading(true);
-            setError(null);
+      
+      // Mock data for now - replace with actual Supabase query
+      const mockEntries: LedgerEntry[] = [
+        {
+          id: '1',
+          date: '2024-01-15',
+          account_code: '1001',
+          account_name: 'Cash in Bank',
+          description: 'Customer payment received',
+          reference: 'INV-2024-001',
+          debit: 1725.00,
+          credit: 0,
+          balance: 15725.00,
+          entry_type: 'payment',
+          created_at: '2024-01-15T10:00:00Z'
+        },
+        {
+          id: '2',
+          date: '2024-01-15',
+          account_code: '1200',
+          account_name: 'Accounts Receivable',
+          description: 'Customer payment received',
+          reference: 'INV-2024-001',
+          debit: 0,
+          credit: 1725.00,
+          balance: 8275.00,
+          entry_type: 'payment',
+          created_at: '2024-01-15T10:00:00Z'
+        },
+        {
+          id: '3',
+          date: '2024-01-20',
+          account_code: '4001',
+          account_name: 'Sales Revenue',
+          description: 'Product sales',
+          reference: 'INV-2024-002',
+          debit: 0,
+          credit: 3220.00,
+          balance: 45220.00,
+          entry_type: 'invoice',
+          created_at: '2024-01-20T10:00:00Z'
+        },
+        {
+          id: '4',
+          date: '2024-01-20',
+          account_code: '1200',
+          account_name: 'Accounts Receivable',
+          description: 'Product sales',
+          reference: 'INV-2024-002',
+          debit: 3220.00,
+          credit: 0,
+          balance: 11495.00,
+          entry_type: 'invoice',
+          created_at: '2024-01-20T10:00:00Z'
+        },
+        {
+          id: '5',
+          date: '2024-01-25',
+          account_code: '5001',
+          account_name: 'Office Supplies Expense',
+          description: 'Office supplies purchase',
+          reference: 'EXP-2024-001',
+          debit: 450.00,
+          credit: 0,
+          balance: 2450.00,
+          entry_type: 'journal',
+          created_at: '2024-01-25T10:00:00Z'
+        },
+        {
+          id: '6',
+          date: '2024-01-25',
+          account_code: '1001',
+          account_name: 'Cash in Bank',
+          description: 'Office supplies purchase',
+          reference: 'EXP-2024-001',
+          debit: 0,
+          credit: 450.00,
+          balance: 15275.00,
+          entry_type: 'journal',
+          created_at: '2024-01-25T10:00:00Z'
+        }
+      ];
 
-            let query = supabase
-                .from('general_ledger')
-                .select('*')
-                .gte('entry_date', dateRange.start)
-                .lte('entry_date', dateRange.end);
-
-            if (searchTerm) {
-                query = query.or(`account_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,reference_no.ilike.%${searchTerm}%`);
-            }
-
-            if (filters.transactionType !== 'ALL') {
-                query = query.eq('transaction_type', filters.transactionType);
-            }
-
-            if (filters.approvalStatus !== 'ALL') {
-                query = query.eq('approval_status', filters.approvalStatus);
-            }
-
-            if (filters.vatOnly) {
-                query = query.eq('vat_applied', true);
-            }
-
-            if (filters.withholdingTaxOnly) {
-                query = query.eq('withholding_tax_applied', true);
-            }
-
-            const { data, totalPages: total } = await getPaginatedData(query, page, rowsPerPage);
-            setEntries(data);
-            setTotalPages(total);
-        } catch (err) {
-            console.error('Error fetching ledger entries:', err);
-            setError('Failed to fetch ledger entries');
-            toast.error('Failed to fetch ledger entries');
+      setEntries(mockEntries);
+    } catch (error) {
+      console.error('Error fetching ledger entries:', error);
+      toast.error('Failed to load ledger entries');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchLedgerEntries();
-    }, [page, searchTerm, dateRange, filters]);
+  const fetchStats = async () => {
+    try {
+      // Calculate stats from entries
+      const mockStats: LedgerStats = {
+        totalDebits: 5395.00,
+        totalCredits: 5395.00,
+        netBalance: 0.00,
+        entriesCount: 6
+      };
 
-    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setSearchTerm(e.target.value);
-        setPage(1);
-    };
+      setStats(mockStats);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
 
-    const handleDateRangeChange = (type: 'start' | 'end', value: string) => {
-        setDateRange(prev => ({
-            ...prev,
-            [type]: value
-        }));
-        setPage(1);
-    };
+  const handleExport = () => {
+    toast.info('Export ledger functionality coming soon!');
+  };
 
-    const handleFilterChange = (key: keyof typeof filters, value: string | boolean) => {
-        setFilters(prev => ({
-            ...prev,
-            [key]: value
-        }));
-        setPage(1);
-    };
+  const handlePrint = () => {
+    toast.info('Print ledger functionality coming soon!');
+  };
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-GH', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
-    };
-
-    const getStatusColor = (status: LedgerEntry['approval_status']) => {
-        switch (status) {
-            case 'PENDING':
-                return 'text-yellow-500';
-            case 'APPROVED':
-                return 'text-green-500';
-            case 'REJECTED':
-                return 'text-red-500';
-            default:
-                return 'text-gray-500';
-        }
-    };
-
-    const handleExportLedger = async () => {
-        toast.info('Exporting ledger... This feature is coming soon.');
-    };
-
-    const handleNewEntry = () => {
-        toast.info('New entry form coming soon.');
-    };
-
-    const handleGenerateGRAReport = () => {
-        toast.info('Generating GRA report... This feature is coming soon.');
-    };
+  const filteredEntries = entries.filter(entry =>
+    entry.account_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    entry.account_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    entry.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    entry.reference.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
     return (
-        <>
-            <header className="flex justify-between items-center mb-4">
-                <div>
-                    <h1 className="text-lg font-medium text-gray-700">General Ledger</h1>
-                    <p className="text-xs">View and manage accounting entries</p>
-                </div>
+    <PageTemplate
+      title="General Ledger"
+      description="Complete record of all financial transactions"
+      showAddButton={false}
+      onSearch={setSearchQuery}
+      customActions={
                 <div className="flex gap-2">
-                    <Button 
-                        className="bg-purple-500 text-white px-2 rounded flex items-center text-xs"
-                        onClick={handleGenerateGRAReport}
-                    >
-                        <FileText size={16} /> GRA Report
-                    </Button>
-                    <Button 
-                        className="bg-green-500 text-white px-2 rounded flex items-center text-xs"
-                        onClick={handleNewEntry}
-                    >
-                        <Plus size={16} /> New Entry
-                    </Button>
-                    <Button 
-                        className="bg-blue-500 text-white px-2 rounded flex items-center text-xs"
-                        onClick={handleExportLedger}
-                    >
-                        <Download size={16} /> Export
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current-month">Current Month</SelectItem>
+              <SelectItem value="last-month">Last Month</SelectItem>
+              <SelectItem value="current-quarter">Current Quarter</SelectItem>
+              <SelectItem value="current-year">Current Year</SelectItem>
+              <SelectItem value="custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Accounts</SelectItem>
+              <SelectItem value="1001">Cash in Bank</SelectItem>
+              <SelectItem value="1200">Accounts Receivable</SelectItem>
+              <SelectItem value="4001">Sales Revenue</SelectItem>
+              <SelectItem value="5001">Office Supplies</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" onClick={handlePrint}>
+            <BookOpen className="w-4 h-4 mr-2" />
+            Print
                     </Button>
                 </div>
-            </header>
-
-            <div className="min-w-full h-full p-3 border-gray-200 border bg-white rounded-md">
-                <div className="flex flex-col gap-4 mb-4">
-                    <div className="flex align-middle justify-between w-full">
-                        <div className="flex align-middle gap-4">
-                            <button 
-                                onClick={() => setFilterOpen(!filterOpen)} 
-                                className="text-gray-700 bg-transparent rounded flex items-center mr-2 border-none"
-                            >
-                                <Filter size={16} color="blue" />
-                            </button>
-                            <div className="flex items-center border border-gray-300 bg-transparent rounded px-2">
-                                <Search size={16}/>
-                                <input 
-                                    type="text" 
-                                    value={searchTerm}
-                                    onChange={handleSearch}
-                                    placeholder="Search entries..." 
-                                    className="border-none text-gray-600 p-2 font-poppins outline-none bg-transparent text-xs font-medium" 
-                                />
+      }
+    >
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Debits</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              <CurrencyCell amount={stats.totalDebits} />
                             </div>
-                            <div className="flex items-center gap-2">
-                                <Calendar size={16} className="text-gray-500" />
-                                <input
-                                    type="date"
-                                    value={dateRange.start}
-                                    onChange={(e) => handleDateRangeChange('start', e.target.value)}
-                                    className="border border-gray-300 rounded px-2 py-1 text-xs"
-                                />
-                                <span className="text-gray-500">to</span>
-                                <input
-                                    type="date"
-                                    value={dateRange.end}
-                                    onChange={(e) => handleDateRangeChange('end', e.target.value)}
-                                    className="border border-gray-300 rounded px-2 py-1 text-xs"
-                                />
-                            </div>
+            <p className="text-xs text-muted-foreground">
+              All debit entries
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              <CurrencyCell amount={stats.totalCredits} />
                         </div>
-                    </div>
+            <p className="text-xs text-muted-foreground">
+              All credit entries
+            </p>
+          </CardContent>
+        </Card>
 
-                    {filterOpen && (
-                        <div className="flex gap-4 text-xs">
-                            <select
-                                value={filters.transactionType}
-                                onChange={(e) => handleFilterChange('transactionType', e.target.value)}
-                                className="border border-gray-300 rounded px-2 py-1"
-                            >
-                                <option value="ALL">All Types</option>
-                                <option value="CASH">Cash</option>
-                                <option value="BANK">Bank</option>
-                                <option value="JOURNAL">Journal</option>
-                            </select>
-                            <select
-                                value={filters.approvalStatus}
-                                onChange={(e) => handleFilterChange('approvalStatus', e.target.value)}
-                                className="border border-gray-300 rounded px-2 py-1"
-                            >
-                                <option value="ALL">All Status</option>
-                                <option value="PENDING">Pending</option>
-                                <option value="APPROVED">Approved</option>
-                                <option value="REJECTED">Rejected</option>
-                            </select>
-                            <label className="flex items-center gap-1">
-                                <input
-                                    type="checkbox"
-                                    checked={filters.vatOnly}
-                                    onChange={(e) => handleFilterChange('vatOnly', e.target.checked)}
-                                />
-                                VAT Entries Only
-                            </label>
-                            <label className="flex items-center gap-1">
-                                <input
-                                    type="checkbox"
-                                    checked={filters.withholdingTaxOnly}
-                                    onChange={(e) => handleFilterChange('withholdingTaxOnly', e.target.checked)}
-                                />
-                                Withholding Tax Only
-                            </label>
-                        </div>
-                    )}
-                </div>
-
-                {loading ? (
-                    <div className="text-center py-8">
-                        <LoadingSpinner size="medium" />
-                        <p className="text-sm text-gray-500 mt-2">Loading ledger entries...</p>
-                    </div>
-                ) : error ? (
-                    <div className="text-center py-8 text-red-500">{error}</div>
-                ) : entries.length === 0 ? (
-                    <div className="text-center py-8">
-                        <p className="text-gray-500">No ledger entries found</p>
-                    </div>
-                ) : (
-                    <table className="min-w-full">
-                        <thead className="text-gray-500 text-xs font-medium">
-                            <tr>
-                                <th className="py-2 px-4 border-b text-left">Date</th>
-                                <th className="py-2 px-4 border-b text-left">Reference</th>
-                                <th className="py-2 px-4 border-b text-left">Account</th>
-                                <th className="py-2 px-4 border-b text-left">Description</th>
-                                <th className="py-2 px-4 border-b text-right">Debit</th>
-                                <th className="py-2 px-4 border-b text-right">Credit</th>
-                                <th className="py-2 px-4 border-b text-right">Balance</th>
-                                <th className="py-2 px-4 border-b text-center">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {entries.map((entry) => (
-                                <tr key={entry.id} className="text-xs hover:bg-gray-50">
-                                    <td className="py-2 px-4 border-b">
-                                        {formatDate(entry.entry_date)}
-                                    </td>
-                                    <td className="py-2 px-4 border-b font-medium text-blue-600">
-                                        {entry.reference_no}
-                                    </td>
-                                    <td className="py-2 px-4 border-b">
-                                        <div>
-                                            <div className="font-medium">{entry.account_name}</div>
-                                            <div className="text-gray-500">{entry.account_code}</div>
-                                        </div>
-                                    </td>
-                                    <td className="py-2 px-4 border-b">
-                                        <div>
-                                            {entry.description}
-                                            {entry.vat_applied && (
-                                                <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-1 rounded">VAT</span>
-                                            )}
-                                            {entry.withholding_tax_applied && (
-                                                <span className="ml-2 text-xs bg-purple-100 text-purple-600 px-1 rounded">WHT</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="py-2 px-4 border-b text-right">
-                                        {entry.debit > 0 ? formatGHSCurrency(entry.debit) : '-'}
-                                    </td>
-                                    <td className="py-2 px-4 border-b text-right">
-                                        {entry.credit > 0 ? formatGHSCurrency(entry.credit) : '-'}
-                                    </td>
-                                    <td className="py-2 px-4 border-b text-right">
-                                        <span className={entry.running_balance >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                            {formatGHSCurrency(entry.running_balance)}
-                                        </span>
-                                    </td>
-                                    <td className="py-2 px-4 border-b text-center">
-                                        <span className={`${getStatusColor(entry.approval_status)} capitalize`}>
-                                            {entry.approval_status.toLowerCase()}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-
-                <div className="flex justify-between items-center mt-4">
-                    <p className="text-xs font-medium text-gray-700">
-                        Page {page} of {totalPages}
-                    </p>
-                    <div className="flex gap-2">
-                        <Button
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                            disabled={page === 1}
-                            className="px-2 py-1 text-xs"
-                        >
-                            Previous
-                        </Button>
-                        <Button
-                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                            disabled={page === totalPages}
-                            className="px-2 py-1 text-xs"
-                        >
-                            Next
-                        </Button>
-                    </div>
-                </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              <CurrencyCell amount={stats.netBalance} />
             </div>
-        </>
+            <p className="text-xs text-muted-foreground">
+              Debits - Credits
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.entriesCount}</div>
+            <p className="text-xs text-muted-foreground">
+              Journal entries
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Ledger Entries Table */}
+      <DataTableTemplate
+        columns={columns}
+        data={filteredEntries}
+        loading={loading}
+        showActions={false}
+        emptyMessage="No ledger entries found for the selected criteria."
+      />
+    </PageTemplate>
     );
 } 

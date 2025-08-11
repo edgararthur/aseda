@@ -7,7 +7,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Plus, Filter, Edit, Trash, User, Eye, Search, ChevronRight, ChevronsLeftRightEllipsis } from 'lucide-react';
+import { Plus, Filter, Edit, Trash, User, Eye, Search, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Sidebar } from '../layout/Sidebar';
 import { Settings, Bell } from 'lucide-react';
 import { LuChevronsLeft, LuChevronsRight, LuFileSpreadsheet, LuPrinter } from "react-icons/lu";

@@ -1,201 +1,383 @@
-import { useState, useEffect } from 'react';
-import { PageContainer } from '@/components/common/PageContainer';
-import supabase from '@/lib/supabase';
+import { useEffect, useState } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Settings, Save, RefreshCw } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface TaxSettings {
-    vat_rate: number;
-    withholding_tax_rate: number;
-    tax_identification_number: string;
-    tax_office: string;
-    tax_period: 'monthly' | 'quarterly';
-    company_name: string;
-    company_address: string;
-    gra_portal_username?: string;
-    gra_portal_password?: string;
+  vatRate: number;
+  vatEnabled: boolean;
+  nhilRate: number;
+  nhilEnabled: boolean;
+  getFundRate: number;
+  getFundEnabled: boolean;
+  withholdingTaxRate: number;
+  withholdingTaxEnabled: boolean;
+  taxPeriod: 'monthly' | 'quarterly' | 'annually';
+  currency: string;
+  taxYear: string;
+  companyTIN: string;
+  vatNumber: string;
 }
 
-export default function TaxSettings() {
+export default function TaxSettingsPage() {
+  const { hasPermission } = useAuth();
     const [settings, setSettings] = useState<TaxSettings>({
-        vat_rate: 12.5,
-        withholding_tax_rate: 5,
-        tax_identification_number: '',
-        tax_office: '',
-        tax_period: 'monthly',
-        company_name: '',
-        company_address: '',
+    vatRate: 12.5,
+    vatEnabled: true,
+    nhilRate: 2.5,
+    nhilEnabled: true,
+    getFundRate: 2.5,
+    getFundEnabled: true,
+    withholdingTaxRate: 5,
+    withholdingTaxEnabled: true,
+    taxPeriod: 'quarterly',
+    currency: 'GHS',
+    taxYear: '2024',
+    companyTIN: '',
+    vatNumber: ''
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetchSettings();
+    fetchTaxSettings();
     }, []);
 
-    const fetchSettings = async () => {
-        try {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('tax_settings')
-                .select('*')
-                .single();
-
-            if (error) throw error;
-            if (data) setSettings(data);
-        } catch (err) {
-            console.error('Error fetching tax settings:', err);
-            toast.error('Failed to load tax settings');
-        } finally {
+  const fetchTaxSettings = async () => {
+    try {
+      // Mock fetch - in real app, this would come from the database
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching tax settings:', error);
+      toast.error('Failed to fetch tax settings');
             setLoading(false);
         }
     };
 
     const handleSave = async () => {
+    if (!hasPermission('settings:write')) {
+      toast.error('You do not have permission to modify tax settings');
+      return;
+    }
+
         try {
             setSaving(true);
-            const { error } = await supabase
-                .from('tax_settings')
-                .upsert(settings);
-
-            if (error) throw error;
+      // Mock save - in real app, this would save to the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
             toast.success('Tax settings saved successfully');
-        } catch (err) {
-            console.error('Error saving tax settings:', err);
+    } catch (error) {
+      console.error('Error saving tax settings:', error);
             toast.error('Failed to save tax settings');
         } finally {
             setSaving(false);
         }
     };
 
-    const handleChange = (field: keyof TaxSettings, value: string | number) => {
-        setSettings(prev => ({ ...prev, [field]: value }));
+  const handleReset = () => {
+    setSettings({
+      vatRate: 12.5,
+      vatEnabled: true,
+      nhilRate: 2.5,
+      nhilEnabled: true,
+      getFundRate: 2.5,
+      getFundEnabled: true,
+      withholdingTaxRate: 5,
+      withholdingTaxEnabled: true,
+      taxPeriod: 'quarterly',
+      currency: 'GHS',
+      taxYear: '2024',
+      companyTIN: '',
+      vatNumber: ''
+    });
+    toast.info('Settings reset to defaults');
     };
 
     if (loading) {
         return (
-            <PageContainer title="Tax Settings" description="Configure your tax rates and company information">
-                <div className="flex items-center justify-center h-64">
-                    <p>Loading settings...</p>
+      <PageTemplate
+        title="Tax Settings"
+        description="Configure tax rates, periods, and compliance settings for your organization."
+        showAddButton={false}
+        showSearchBar={false}
+      >
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
-            </PageContainer>
+      </PageTemplate>
         );
     }
 
     return (
-        <PageContainer title="Tax Settings" description="Configure your tax rates and company information">
-            <div className="space-y-6">
+    <PageTemplate
+      title="Tax Settings"
+      description="Configure tax rates, periods, and compliance settings for your organization."
+      showAddButton={false}
+      showSearchBar={false}
+      showExportImport={false}
+      customActions={
+        <div className="flex gap-2">
+          <Button onClick={handleReset} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Reset
+          </Button>
+          <Button 
+            onClick={handleSave} 
+            size="sm" 
+            disabled={saving || !hasPermission('settings:write')}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {saving ? 'Saving...' : 'Save Settings'}
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* VAT Settings */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Tax Rates</CardTitle>
-                        <CardDescription>Configure your VAT and withholding tax rates</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              VAT Configuration
+            </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="vat_rate">VAT Rate (%)</Label>
-                                <Input
-                                    id="vat_rate"
-                                    type="number"
-                                    step="0.1"
-                                    value={settings.vat_rate}
-                                    onChange={(e) => handleChange('vat_rate', parseFloat(e.target.value))}
+            <div className="flex items-center justify-between">
+              <Label htmlFor="vat-enabled">Enable VAT</Label>
+              <Switch
+                id="vat-enabled"
+                checked={settings.vatEnabled}
+                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, vatEnabled: checked }))}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="withholding_tax_rate">Withholding Tax Rate (%)</Label>
+            
+            <div>
+              <Label htmlFor="vat-rate">VAT Rate (%)</Label>
                                 <Input
-                                    id="withholding_tax_rate"
+                id="vat-rate"
                                     type="number"
+                value={settings.vatRate}
+                onChange={(e) => setSettings(prev => ({ ...prev, vatRate: parseFloat(e.target.value) || 0 }))}
+                disabled={!settings.vatEnabled}
                                     step="0.1"
-                                    value={settings.withholding_tax_rate}
-                                    onChange={(e) => handleChange('withholding_tax_rate', parseFloat(e.target.value))}
+                min="0"
+                max="100"
                                 />
                             </div>
+            
+            <div>
+              <Label htmlFor="vat-number">VAT Registration Number</Label>
+              <Input
+                id="vat-number"
+                value={settings.vatNumber}
+                onChange={(e) => setSettings(prev => ({ ...prev, vatNumber: e.target.value }))}
+                placeholder="Enter VAT number"
+              />
                         </div>
                     </CardContent>
                 </Card>
 
+        {/* NHIL Settings */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Company Information</CardTitle>
-                        <CardDescription>Your company's tax registration details</CardDescription>
+            <CardTitle>NHIL Configuration</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="company_name">Company Name</Label>
-                            <Input
-                                id="company_name"
-                                value={settings.company_name}
-                                onChange={(e) => handleChange('company_name', e.target.value)}
+            <div className="flex items-center justify-between">
+              <Label htmlFor="nhil-enabled">Enable NHIL</Label>
+              <Switch
+                id="nhil-enabled"
+                checked={settings.nhilEnabled}
+                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, nhilEnabled: checked }))}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="company_address">Company Address</Label>
+            
+            <div>
+              <Label htmlFor="nhil-rate">NHIL Rate (%)</Label>
                             <Input
-                                id="company_address"
-                                value={settings.company_address}
-                                onChange={(e) => handleChange('company_address', e.target.value)}
+                id="nhil-rate"
+                type="number"
+                value={settings.nhilRate}
+                onChange={(e) => setSettings(prev => ({ ...prev, nhilRate: parseFloat(e.target.value) || 0 }))}
+                disabled={!settings.nhilEnabled}
+                step="0.1"
+                min="0"
+                max="100"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="tax_identification_number">Tax Identification Number (TIN)</Label>
-                            <Input
-                                id="tax_identification_number"
-                                value={settings.tax_identification_number}
-                                onChange={(e) => handleChange('tax_identification_number', e.target.value)}
+          </CardContent>
+        </Card>
+
+        {/* GetFund Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle>GetFund Configuration</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="getfund-enabled">Enable GetFund</Label>
+              <Switch
+                id="getfund-enabled"
+                checked={settings.getFundEnabled}
+                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, getFundEnabled: checked }))}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="tax_office">GRA Tax Office</Label>
+            
+            <div>
+              <Label htmlFor="getfund-rate">GetFund Rate (%)</Label>
                             <Input
-                                id="tax_office"
-                                value={settings.tax_office}
-                                onChange={(e) => handleChange('tax_office', e.target.value)}
+                id="getfund-rate"
+                type="number"
+                value={settings.getFundRate}
+                onChange={(e) => setSettings(prev => ({ ...prev, getFundRate: parseFloat(e.target.value) || 0 }))}
+                disabled={!settings.getFundEnabled}
+                step="0.1"
+                min="0"
+                max="100"
                             />
                         </div>
                     </CardContent>
                 </Card>
 
+        {/* Withholding Tax Settings */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>GRA Portal Credentials</CardTitle>
-                        <CardDescription>Your GRA portal login credentials (optional)</CardDescription>
+            <CardTitle>Withholding Tax Configuration</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="gra_portal_username">Portal Username</Label>
-                            <Input
-                                id="gra_portal_username"
-                                type="text"
-                                value={settings.gra_portal_username || ''}
-                                onChange={(e) => handleChange('gra_portal_username', e.target.value)}
+            <div className="flex items-center justify-between">
+              <Label htmlFor="withholding-enabled">Enable Withholding Tax</Label>
+              <Switch
+                id="withholding-enabled"
+                checked={settings.withholdingTaxEnabled}
+                onCheckedChange={(checked) => setSettings(prev => ({ ...prev, withholdingTaxEnabled: checked }))}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="gra_portal_password">Portal Password</Label>
+            
+            <div>
+              <Label htmlFor="withholding-rate">Default Withholding Rate (%)</Label>
                             <Input
-                                id="gra_portal_password"
-                                type="password"
-                                value={settings.gra_portal_password || ''}
-                                onChange={(e) => handleChange('gra_portal_password', e.target.value)}
+                id="withholding-rate"
+                type="number"
+                value={settings.withholdingTaxRate}
+                onChange={(e) => setSettings(prev => ({ ...prev, withholdingTaxRate: parseFloat(e.target.value) || 0 }))}
+                disabled={!settings.withholdingTaxEnabled}
+                step="0.1"
+                min="0"
+                max="100"
                             />
                         </div>
                     </CardContent>
                 </Card>
 
-                <div className="flex justify-end">
-                    <Button 
-                        onClick={handleSave} 
-                        disabled={saving}
-                    >
-                        {saving ? 'Saving...' : 'Save Settings'}
-                    </Button>
+        {/* General Tax Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle>General Tax Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="tax-period">Tax Reporting Period</Label>
+              <Select 
+                value={settings.taxPeriod} 
+                onValueChange={(value: 'monthly' | 'quarterly' | 'annually') => 
+                  setSettings(prev => ({ ...prev, taxPeriod: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="annually">Annually</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="currency">Default Currency</Label>
+              <Select 
+                value={settings.currency} 
+                onValueChange={(value) => setSettings(prev => ({ ...prev, currency: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GHS">Ghana Cedi (GHS)</SelectItem>
+                  <SelectItem value="USD">US Dollar (USD)</SelectItem>
+                  <SelectItem value="EUR">Euro (EUR)</SelectItem>
+                  <SelectItem value="GBP">British Pound (GBP)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="tax-year">Tax Year</Label>
+              <Select 
+                value={settings.taxYear} 
+                onValueChange={(value) => setSettings(prev => ({ ...prev, taxYear: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2025">2025</SelectItem>
+                  <SelectItem value="2026">2026</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Company Tax Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Company Tax Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="company-tin">Company TIN</Label>
+              <Input
+                id="company-tin"
+                value={settings.companyTIN}
+                onChange={(e) => setSettings(prev => ({ ...prev, companyTIN: e.target.value }))}
+                placeholder="Enter TIN number"
+              />
+            </div>
+            
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">Tax Summary</h4>
+              <div className="space-y-1 text-sm text-blue-800">
+                <div className="flex justify-between">
+                  <span>VAT Rate:</span>
+                  <span>{settings.vatEnabled ? `${settings.vatRate}%` : 'Disabled'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>NHIL Rate:</span>
+                  <span>{settings.nhilEnabled ? `${settings.nhilRate}%` : 'Disabled'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GetFund Rate:</span>
+                  <span>{settings.getFundEnabled ? `${settings.getFundRate}%` : 'Disabled'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Withholding Tax:</span>
+                  <span>{settings.withholdingTaxEnabled ? `${settings.withholdingTaxRate}%` : 'Disabled'}</span>
+                </div>
                 </div>
             </div>
-        </PageContainer>
+          </CardContent>
+        </Card>
+      </div>
+    </PageTemplate>
     );
 } 

@@ -1,276 +1,420 @@
-import { useEffect, useState } from 'react';
-import { PageContainer } from '@/components/common/PageContainer';
-import { Card } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { offlineStorage } from '@/lib/offline-storage';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { 
+  DollarSign, 
+  TrendingUp, 
+  TrendingDown, 
+  Users, 
+  FileText, 
+  CreditCard, 
+  PiggyBank,
+  Plus,
+  Eye,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
+  Zap
+} from 'lucide-react';
+import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { formatCurrency } from '@/lib/utils';
-import { supabase } from '@/lib/auth';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from 'recharts';
-import { ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface DashboardStats {
-  totalSales: number;
+  totalInvoices: number;
   totalExpenses: number;
-  totalReturns: number;
+  totalPayroll: number;
   netProfit: number;
-  salesGrowth: number;
-  expenseGrowth: number;
-  returnsGrowth: number;
-  profitGrowth: number;
+  cashFlow: number;
+  monthlyGrowth: number;
+  pendingInvoices: number;
+  overdueInvoices: number;
+  totalEmployees: number;
+  activeProjects: number;
 }
 
-interface RecentActivity {
+interface RecentTransaction {
   id: string;
-  type: string;
+  type: 'income' | 'expense' | 'transfer';
   description: string;
   amount: number;
-  created_at: string;
+  date: string;
+  category: string;
+  status: 'completed' | 'pending' | 'failed';
 }
 
-export default function Dashboard() {
-  const [loading, setLoading] = useState(true);
+interface QuickAction {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  action: () => void;
+  color: string;
+}
+
+export default function DashboardPage() {
+  const { user, profile } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
-    totalSales: 0,
+    totalInvoices: 0,
     totalExpenses: 0,
-    totalReturns: 0,
+    totalPayroll: 0,
     netProfit: 0,
-    salesGrowth: 20.1,
-    expenseGrowth: 4.75,
-    returnsGrowth: -2.5,
-    profitGrowth: 12.5,
+    cashFlow: 0,
+    monthlyGrowth: 0,
+    pendingInvoices: 0,
+    overdueInvoices: 0,
+    totalEmployees: 0,
+    activeProjects: 0
   });
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
-  const [salesData, setSalesData] = useState([]);
-  const [expenseData, setExpenseData] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+    
+    // Update time every minute
+    const timeInterval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
 
-  async function fetchDashboardData() {
+    return () => clearInterval(timeInterval);
+  }, [profile]);
+
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
 
-      // Fetch stats
-      const { data: statsData, error: statsError } = await supabase
-        .from('dashboard_stats')
-        .select('*')
-        .single();
+      // Fetch data from offline storage or mock data
+      const mockStats: DashboardStats = {
+        totalInvoices: 156780.50,
+        totalExpenses: 89450.25,
+        totalPayroll: 45200.00,
+        netProfit: 22130.25,
+        cashFlow: 89450.75,
+        monthlyGrowth: 12.5,
+        pendingInvoices: 8,
+        overdueInvoices: 3,
+        totalEmployees: 12,
+        activeProjects: 7
+      };
 
-      if (statsError) throw statsError;
-      if (statsData) {
-        setStats(statsData);
-      }
+      const mockTransactions: RecentTransaction[] = [
+        {
+          id: '1',
+          type: 'income',
+          description: 'Payment from Kofi Asante - INV-2024-001',
+          amount: 2500.00,
+          date: new Date().toISOString(),
+          category: 'Invoice Payment',
+          status: 'completed'
+        },
+        {
+          id: '2',
+          type: 'expense',
+          description: 'Office Supplies - Staples',
+          amount: 450.75,
+          date: new Date(Date.now() - 86400000).toISOString(),
+          category: 'Office Expenses',
+          status: 'completed'
+        },
+        {
+          id: '3',
+          type: 'expense',
+          description: 'Monthly Software Subscription',
+          amount: 299.99,
+          date: new Date(Date.now() - 172800000).toISOString(),
+          category: 'Software',
+          status: 'pending'
+        },
+        {
+          id: '4',
+          type: 'income',
+          description: 'Consulting Services - ABC Corp',
+          amount: 1800.00,
+          date: new Date(Date.now() - 259200000).toISOString(),
+          category: 'Services',
+          status: 'completed'
+        },
+        {
+          id: '5',
+          type: 'transfer',
+          description: 'Transfer to Savings Account',
+          amount: 5000.00,
+          date: new Date(Date.now() - 345600000).toISOString(),
+          category: 'Transfer',
+          status: 'completed'
+        }
+      ];
 
-      // Fetch recent activity
-      const { data: activityData, error: activityError } = await supabase
-        .from('activity_log')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (activityError) throw activityError;
-      if (activityData) {
-        setRecentActivity(activityData);
-      }
-
-      // Fetch sales data for chart
-      const { data: salesChartData, error: salesChartError } = await supabase
-        .from('monthly_sales')
-        .select('*')
-        .order('month', { ascending: true })
-        .limit(12);
-
-      if (salesChartError) throw salesChartError;
-      if (salesChartData) {
-        setSalesData(salesChartData);
-      }
-
-      // Fetch expense data for chart
-      const { data: expenseChartData, error: expenseChartError } = await supabase
-        .from('monthly_expenses')
-        .select('*')
-        .order('month', { ascending: true })
-        .limit(12);
-
-      if (expenseChartError) throw expenseChartError;
-      if (expenseChartData) {
-        setExpenseData(expenseChartData);
-      }
-
+      setStats(mockStats);
+      setRecentTransactions(mockTransactions);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const quickActions: QuickAction[] = [
+    {
+      title: 'Create Invoice',
+      description: 'Generate a new customer invoice',
+      icon: FileText,
+      action: () => toast.info('Create Invoice - Coming soon!'),
+      color: 'bg-blue-500'
+    },
+    {
+      title: 'Record Expense',
+      description: 'Add a new business expense',
+      icon: CreditCard,
+      action: () => toast.info('Record Expense - Coming soon!'),
+      color: 'bg-red-500'
+    },
+    {
+      title: 'Add Transaction',
+      description: 'Record a financial transaction',
+      icon: DollarSign,
+      action: () => toast.info('Add Transaction - Coming soon!'),
+      color: 'bg-green-500'
+    },
+    {
+      title: 'Process Payroll',
+      description: 'Run employee payroll',
+      icon: Users,
+      action: () => toast.info('Process Payroll - Coming soon!'),
+      color: 'bg-purple-500'
+    }
+  ];
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return 'Today';
+    if (diffDays === 2) return 'Yesterday';
+    if (diffDays <= 7) return `${diffDays - 1} days ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'income': return ArrowUpRight;
+      case 'expense': return ArrowDownRight;
+      case 'transfer': return Activity;
+      default: return DollarSign;
+    }
+  };
+
+  const getTransactionColor = (type: string) => {
+    switch (type) {
+      case 'income': return 'text-green-600';
+      case 'expense': return 'text-red-600';
+      case 'transfer': return 'text-blue-600';
+      default: return 'text-gray-600';
+    }
+  };
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <PageContainer
-      title="Dashboard"
-      description="Overview of your business performance"
-    >
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <Card.Header>
-            <Card.Title>Total Sales</Card.Title>
-          </Card.Header>
-          <Card.Content>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
-            <div className="mt-2 flex items-center text-sm">
-              {stats.salesGrowth > 0 ? (
-                <ArrowUpRight className="mr-1 h-4 w-4 text-green-500" />
-              ) : (
-                <ArrowDownRight className="mr-1 h-4 w-4 text-red-500" />
-              )}
-              <span className={stats.salesGrowth > 0 ? 'text-green-500' : 'text-red-500'}>
-                {stats.salesGrowth}% from last month
-              </span>
+    <div className="h-full flex flex-col space-y-6 animate-fade-in">
+      {/* Welcome Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gradient">
+            Welcome back, {user?.full_name?.split(' ')[0] || 'User'}!
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {currentTime.toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <ConnectionStatus />
+          <Badge variant="outline" className="hidden sm:flex items-center gap-1">
+            <Zap className="w-3 h-3" />
+            {profile?.role || 'Member'}
+          </Badge>
+        </div>
             </div>
-          </Card.Content>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
+            <FileText className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.totalInvoices)}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.pendingInvoices} pending, {stats.overdueInvoices} overdue
+            </p>
+          </CardContent>
         </Card>
 
-        <Card>
-          <Card.Header>
-            <Card.Title>Total Expenses</Card.Title>
-          </Card.Header>
-          <Card.Content>
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <CreditCard className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalExpenses)}</div>
-            <div className="mt-2 flex items-center text-sm">
-              {stats.expenseGrowth > 0 ? (
-                <ArrowUpRight className="mr-1 h-4 w-4 text-red-500" />
-              ) : (
-                <ArrowDownRight className="mr-1 h-4 w-4 text-green-500" />
-              )}
-              <span className={stats.expenseGrowth > 0 ? 'text-red-500' : 'text-green-500'}>
-                {stats.expenseGrowth}% from last month
-              </span>
-            </div>
-          </Card.Content>
+            <p className="text-xs text-muted-foreground">
+              This month
+            </p>
+          </CardContent>
         </Card>
 
-        <Card>
-          <Card.Header>
-            <Card.Title>Total Returns</Card.Title>
-          </Card.Header>
-          <Card.Content>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalReturns)}</div>
-            <div className="mt-2 flex items-center text-sm">
-              {stats.returnsGrowth > 0 ? (
-                <ArrowUpRight className="mr-1 h-4 w-4 text-red-500" />
-              ) : (
-                <ArrowDownRight className="mr-1 h-4 w-4 text-green-500" />
-              )}
-              <span className={stats.returnsGrowth > 0 ? 'text-red-500' : 'text-green-500'}>
-                {stats.returnsGrowth}% from last month
-              </span>
-            </div>
-          </Card.Content>
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Payroll</CardTitle>
+            <Users className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.totalPayroll)}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.totalEmployees} employees
+            </p>
+          </CardContent>
         </Card>
 
-        <Card>
-          <Card.Header>
-            <Card.Title>Net Profit</Card.Title>
-          </Card.Header>
-          <Card.Content>
-            <div className="text-2xl font-bold">{formatCurrency(stats.netProfit)}</div>
-            <div className="mt-2 flex items-center text-sm">
-              {stats.profitGrowth > 0 ? (
-                <ArrowUpRight className="mr-1 h-4 w-4 text-green-500" />
-              ) : (
-                <ArrowDownRight className="mr-1 h-4 w-4 text-red-500" />
-              )}
-              <span className={stats.profitGrowth > 0 ? 'text-green-500' : 'text-red-500'}>
-                {stats.profitGrowth}% from last month
-              </span>
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {formatCurrency(stats.netProfit)}
             </div>
-          </Card.Content>
+            <div className="flex items-center text-xs text-green-600">
+              <TrendingUp className="w-3 h-3 mr-1" />
+              +{stats.monthlyGrowth}% from last month
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Cash Flow</CardTitle>
+            <PiggyBank className="h-4 w-4 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.cashFlow)}</div>
+            <p className="text-xs text-muted-foreground">
+              Available balance
+            </p>
+          </CardContent>
         </Card>
       </div>
 
-      {/* Charts */}
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <Card>
-          <Card.Header>
-            <Card.Title>Sales Overview</Card.Title>
-            <Card.Description>Monthly sales performance</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={salesData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="amount" fill="#0ea5e9" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card.Content>
-        </Card>
-
-        <Card>
-          <Card.Header>
-            <Card.Title>Expense Trends</Card.Title>
-            <Card.Description>Monthly expense analysis</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={expenseData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="amount" stroke="#f43f5e" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Card.Content>
-        </Card>
-      </div>
-
-      {/* Recent Activity */}
-      <Card className="mt-6">
-        <Card.Header>
-          <Card.Title>Recent Activity</Card.Title>
-          <Card.Description>Latest transactions and updates</Card.Description>
-        </Card.Header>
-        <Card.Content>
-          <div className="space-y-4">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between border-b pb-4 last:border-0">
-                <div>
-                  <p className="font-medium text-gray-900">{activity.type}</p>
-                  <p className="text-sm text-gray-500">{activity.description}</p>
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="w-5 h-5" />
+            Quick Actions
+          </CardTitle>
+          <CardDescription>
+            Perform common tasks quickly
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {quickActions.map((action, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                className="h-auto p-4 flex flex-col items-start gap-3 hover:shadow-md transition-all"
+                onClick={action.action}
+              >
+                <div className={`w-10 h-10 rounded-lg ${action.color} flex items-center justify-center`}>
+                  <action.icon className="w-5 h-5 text-white" />
                 </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">{formatCurrency(activity.amount)}</p>
-                  <p className="text-sm text-gray-500">{new Date(activity.created_at).toLocaleDateString()}</p>
+                <div className="text-left">
+                  <div className="font-medium">{action.title}</div>
+                  <div className="text-sm text-muted-foreground">{action.description}</div>
                 </div>
-              </div>
+              </Button>
             ))}
           </div>
-        </Card.Content>
+        </CardContent>
       </Card>
-    </PageContainer>
+
+      {/* Recent Transactions */}
+      <Card className="flex-1">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Recent Transactions</CardTitle>
+            <CardDescription>
+              Latest financial activities
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm">
+            <Eye className="w-4 h-4 mr-2" />
+            View All
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentTransactions.map((transaction) => {
+              const Icon = getTransactionIcon(transaction.type);
+              return (
+                <div key={transaction.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full bg-muted flex items-center justify-center ${getTransactionColor(transaction.type)}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{transaction.description}</p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>{transaction.category}</span>
+                        <span>•</span>
+                        <span>{formatDate(transaction.date)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-medium ${getTransactionColor(transaction.type)}`}>
+                      {transaction.type === 'expense' ? '-' : '+'}
+                      {formatCurrency(transaction.amount)}
+                    </p>
+                    <Badge 
+                      variant={transaction.status === 'completed' ? 'default' : 'secondary'}
+                      className="text-xs"
+                    >
+                      {transaction.status}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 } 

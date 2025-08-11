@@ -1,193 +1,211 @@
-import { useState, useEffect } from 'react';
-import { PageContainer } from '@/components/common/PageContainer';
-import { DataTable } from '@/components/common/DataTable';
-import supabase from '@/lib/supabase';
-import { formatGHSCurrency } from '@/lib/tax-utils';
-import { Eye, Edit, Trash, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { DataTableTemplate, Column } from '@/components/common/DataTableTemplate';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Activity, Package, AlertTriangle, TrendingDown } from 'lucide-react';
 
 interface StockItem {
     id: string;
-    product_code: string;
-    product_name: string;
+  productName: string;
+  sku: string;
     category: string;
-    quantity: number;
-    reorder_level: number;
-    unit_cost: number;
-    total_value: number;
-    last_restock_date: string;
-    location: string;
+  currentStock: number;
+  reorderLevel: number;
+  unitPrice: number;
+  totalValue: number;
+  status: 'in-stock' | 'low-stock' | 'out-of-stock';
+  lastUpdated: string;
 }
 
-export default function StockManagement() {
-    const [stockItems, setStockItems] = useState<StockItem[]>([]);
+export default function StockManagementPage() {
+  const [items, setItems] = useState<StockItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const ITEMS_PER_PAGE = 10;
+
+  useEffect(() => {
+    fetchStockItems();
+  }, []);
 
     const fetchStockItems = async () => {
         try {
-            setLoading(true);
-            setError(null);
+      // Mock stock data
+      const mockItems: StockItem[] = [
+        {
+          id: '1',
+          productName: 'Office Chairs',
+          sku: 'OFC-001',
+          category: 'Furniture',
+          currentStock: 25,
+          reorderLevel: 10,
+          unitPrice: 150,
+          totalValue: 3750,
+          status: 'in-stock',
+          lastUpdated: '2024-01-15T10:00:00Z'
+        },
+        {
+          id: '2',
+          productName: 'Laptop Computers',
+          sku: 'TECH-002',
+          category: 'Technology',
+          currentStock: 5,
+          reorderLevel: 8,
+          unitPrice: 1200,
+          totalValue: 6000,
+          status: 'low-stock',
+          lastUpdated: '2024-01-14T15:30:00Z'
+        },
+        {
+          id: '3',
+          productName: 'Printer Paper',
+          sku: 'SUP-003',
+          category: 'Supplies',
+          currentStock: 0,
+          reorderLevel: 20,
+          unitPrice: 5,
+          totalValue: 0,
+          status: 'out-of-stock',
+          lastUpdated: '2024-01-10T08:45:00Z'
+        }
+      ];
 
-            let query = supabase
-                .from('stock_items')
-                .select('*', { count: 'exact' });
-
-            if (searchTerm) {
-                query = query.or(`product_code.ilike.%${searchTerm}%,product_name.ilike.%${searchTerm}%`);
-            }
-
-            const { data, count, error } = await query
-                .order('product_name', { ascending: true })
-                .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1);
-
-            if (error) throw error;
-
-            setStockItems(data || []);
-            setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE));
-        } catch (err) {
-            setError('Failed to fetch stock items');
-            console.error('Error:', err);
+      setItems(mockItems);
+    } catch (error) {
+      console.error('Error fetching stock items:', error);
+      toast.error('Failed to fetch stock data');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchStockItems();
-    }, [page, searchTerm]);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'in-stock':
+        return <Badge className="bg-green-100 text-green-800">In Stock</Badge>;
+      case 'low-stock':
+        return <Badge className="bg-yellow-100 text-yellow-800">Low Stock</Badge>;
+      case 'out-of-stock':
+        return <Badge className="bg-red-100 text-red-800">Out of Stock</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
 
-    const handleSearch = (term: string) => {
-        setSearchTerm(term);
-        setPage(1);
-    };
+  const columns: Column[] = [
+    {
+      key: 'sku',
+      label: 'SKU',
+      render: (item) => <span className="font-mono text-sm">{item.sku}</span>
+    },
+    {
+      key: 'productName',
+      label: 'Product Name',
+      render: (item) => item.productName
+    },
+    {
+      key: 'category',
+      label: 'Category',
+      render: (item) => item.category
+    },
+    {
+      key: 'currentStock',
+      label: 'Current Stock',
+      render: (item) => item.currentStock.toString()
+    },
+    {
+      key: 'reorderLevel',
+      label: 'Reorder Level',
+      render: (item) => item.reorderLevel.toString()
+    },
+    {
+      key: 'unitPrice',
+      label: 'Unit Price',
+      render: (item) => `₵${item.unitPrice.toLocaleString()}`
+    },
+    {
+      key: 'totalValue',
+      label: 'Total Value',
+      render: (item) => `₵${item.totalValue.toLocaleString()}`
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (item) => getStatusBadge(item.status)
+    }
+  ];
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this stock item?')) return;
-
-        try {
-            const { error } = await supabase
-                .from('stock_items')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
-            toast.success('Stock item deleted successfully');
-            fetchStockItems();
-        } catch (err) {
-            toast.error('Failed to delete stock item');
-            console.error('Error:', err);
-        }
-    };
-
-    const getStockStatus = (item: StockItem) => {
-        if (item.quantity <= 0) {
-            return { color: 'bg-red-100 text-red-800', text: 'Out of Stock' };
-        }
-        if (item.quantity <= item.reorder_level) {
-            return { color: 'bg-yellow-100 text-yellow-800', text: 'Low Stock' };
-        }
-        return { color: 'bg-green-100 text-green-800', text: 'In Stock' };
-    };
-
-    const columns = [
-        { header: 'Product Code', accessor: 'product_code' as keyof StockItem },
-        { header: 'Product Name', accessor: 'product_name' as keyof StockItem },
-        { header: 'Category', accessor: 'category' as keyof StockItem },
-        { 
-            header: 'Quantity', 
-            accessor: (item: StockItem) => (
-                <div className="flex items-center gap-2">
-                    <span>{item.quantity}</span>
-                    {item.quantity <= item.reorder_level && (
-                        <AlertCircle size={16} className="text-yellow-500" />
-                    )}
-                </div>
-            ),
-            align: 'right' as const
-        },
-        { 
-            header: 'Status', 
-            accessor: (item: StockItem) => {
-                const status = getStockStatus(item);
-                return (
-                    <span className={`px-2 py-1 rounded-full text-xs ${status.color}`}>
-                        {status.text}
-                    </span>
-                );
-            }
-        },
-        { 
-            header: 'Unit Cost', 
-            accessor: (item: StockItem) => formatGHSCurrency(item.unit_cost),
-            align: 'right' as const
-        },
-        { 
-            header: 'Total Value', 
-            accessor: (item: StockItem) => formatGHSCurrency(item.total_value),
-            align: 'right' as const
-        },
-        { 
-            header: 'Last Restock', 
-            accessor: (item: StockItem) => new Date(item.last_restock_date).toLocaleDateString()
-        },
-        { header: 'Location', accessor: 'location' as keyof StockItem },
-        {
-            header: 'Actions',
-            accessor: (item: StockItem) => (
-                <div className="flex gap-2">
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('View stock item:', item.id)}
-                    >
-                        <Eye size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('Edit stock item:', item.id)}
-                    >
-                        <Edit size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleDelete(item.id)}
-                        className="text-red-500 hover:text-red-700"
-                    >
-                        <Trash size={16} />
-                    </Button>
-                </div>
-            ),
-            align: 'center' as const
-        }
-    ];
+  const totalValue = items.reduce((sum, item) => sum + item.totalValue, 0);
+  const lowStockItems = items.filter(item => item.status === 'low-stock' || item.status === 'out-of-stock').length;
+  const totalItems = items.length;
 
     return (
-        <PageContainer
+    <PageTemplate
             title="Stock Management"
-            description="Manage your inventory and stock levels"
-            onNew={() => console.log('Create new stock item')}
-            onExport={() => console.log('Export stock items')}
-        >
-            <DataTable
+      description="Monitor inventory levels, track stock movements, and manage reorder points."
+      onSearch={setSearchTerm}
+      showAddButton={false}
+      showExportImport={true}
+    >
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalItems}</div>
+            <p className="text-xs text-muted-foreground">In inventory</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₵{totalValue.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Inventory value</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Low Stock Alert</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{lowStockItems}</div>
+            <p className="text-xs text-muted-foreground">Items need reorder</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stock Turnover</CardTitle>
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">4.2x</div>
+            <p className="text-xs text-muted-foreground">Annual rate</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Data Table */}
+      <DataTableTemplate
+        data={items.filter(item => 
+          item.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.category.toLowerCase().includes(searchTerm.toLowerCase())
+        )}
                 columns={columns}
-                data={stockItems}
                 loading={loading}
-                error={error}
-                onSearch={handleSearch}
-                searchPlaceholder="Search by product code or name..."
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-            />
-        </PageContainer>
+        emptyMessage="No stock items found"
+      />
+    </PageTemplate>
     );
 } 

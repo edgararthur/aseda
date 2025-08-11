@@ -109,6 +109,32 @@ export default function App() {
                   </PublicRoute>
                 }
               />
+              
+              {/* Auth Routes */}
+              <Route
+                path="/auth/login"
+                element={
+                  <PublicRoute>
+                    <LoginForm />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/auth/signup"
+                element={
+                  <PublicRoute>
+                    <SignupForm />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/auth/forgot-password"
+                element={
+                  <PublicRoute>
+                    <ForgotPasswordForm />
+                  </PublicRoute>
+                }
+              />
               <Route path="/auth/callback" element={<AuthCallback />} />
 
               {/* Private Routes */}

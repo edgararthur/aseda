@@ -1,5 +1,5 @@
 // components/Receipt.tsx
-import { Printer, QrCodeIcon, X } from 'lucide-react';
+import { Printer, QrCode, X } from 'lucide-react';
 import React from 'react';
 
 interface ReceiptProps {
@@ -129,7 +129,7 @@ const Receipt: React.FC<ReceiptProps> = ({
                         <Printer size={18} className="mr-2" />
                         Print
                     </button>
-                    <QrCodeIcon size={58} />
+                                                    <QrCode size={58} />
                 </div>
             </div>
         </div>

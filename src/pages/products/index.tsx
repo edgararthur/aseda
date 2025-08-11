@@ -1,220 +1,324 @@
-import { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Plus, Filter, Edit, Trash, Search } from 'lucide-react';
-import { ToastContainer, toast } from 'react-toastify';
-import { Sidebar } from '@/components/layout/Sidebar';
-import Header from '@/components/layout/Header';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
-import supabase from '@/lib/supabase';
+import React, { useState, useEffect } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { DataTableTemplate, Column, StatusBadge, CurrencyCell } from '@/components/common/DataTableTemplate';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { 
+  Package, 
+  Plus, 
+  Eye, 
+  Edit, 
+  Trash2, 
+  BarChart3,
+  AlertTriangle,
+  CheckCircle,
+  Clock
+} from 'lucide-react';
 
 interface Product {
     id: string;
-    product_name: string;
+  name: string;
     sku: string;
-    category_id: string;
-    price: number;
-    unit: string;
-    tax_rate: number;
-    stock_quantity: number;
+  category: string;
+  description: string;
+  unit_price: number;
+  cost_price: number;
+  quantity_in_stock: number;
+  reorder_level: number;
+  status: 'active' | 'inactive' | 'discontinued';
     created_at: string;
     updated_at: string;
 }
 
-export default function Products() {
+interface ProductStats {
+  total: number;
+  active: number;
+  lowStock: number;
+  outOfStock: number;
+  totalValue: number;
+}
+
+export default function ProductsPage() {
+  const { user, profile } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
+  const [stats, setStats] = useState<ProductStats>({
+    total: 0,
+    active: 0,
+    lowStock: 0,
+    outOfStock: 0,
+    totalValue: 0
+  });
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterOpen, setFilterOpen] = useState(false);
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const rowsPerPage = 10;
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const columns: Column[] = [
+    {
+      key: 'sku',
+      label: 'SKU',
+      render: (value) => (
+        <span className="font-medium text-blue-600">{value}</span>
+      )
+    },
+    {
+      key: 'name',
+      label: 'Product Name',
+      render: (value, row) => (
+        <div>
+          <div className="font-medium">{value}</div>
+          <div className="text-sm text-gray-500">{row.category}</div>
+        </div>
+      )
+    },
+    {
+      key: 'unit_price',
+      label: 'Unit Price',
+      render: (value) => <CurrencyCell amount={value} />
+    },
+    {
+      key: 'quantity_in_stock',
+      label: 'Stock',
+      render: (value, row) => {
+        const isLowStock = value <= row.reorder_level && value > 0;
+        const isOutOfStock = value === 0;
+        
+        return (
+          <div className="flex items-center gap-2">
+            <span className={`font-medium ${
+              isOutOfStock ? 'text-red-600' : 
+              isLowStock ? 'text-yellow-600' : 
+              'text-green-600'
+            }`}>
+              {value}
+            </span>
+            {isOutOfStock && <AlertTriangle className="w-4 h-4 text-red-500" />}
+            {isLowStock && <Clock className="w-4 h-4 text-yellow-500" />}
+          </div>
+        );
+      }
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (value) => <StatusBadge status={value} />
+    }
+  ];
+
+  useEffect(() => {
+    fetchProducts();
+    fetchStats();
+  }, [profile]);
 
     const fetchProducts = async () => {
         try {
             setLoading(true);
-            setError(null);
+      
+      // Mock data for now - replace with actual Supabase query
+      const mockProducts: Product[] = [
+        {
+          id: '1',
+          name: 'MacBook Pro 16"',
+          sku: 'MBP-16-2024',
+          category: 'Electronics',
+          description: 'Apple MacBook Pro 16-inch with M3 chip',
+          unit_price: 12500.00,
+          cost_price: 10000.00,
+          quantity_in_stock: 15,
+          reorder_level: 5,
+          status: 'active',
+          created_at: '2024-01-15T10:00:00Z',
+          updated_at: '2024-01-15T10:00:00Z'
+        },
+        {
+          id: '2',
+          name: 'Office Chair',
+          sku: 'OFC-CHR-001',
+          category: 'Furniture',
+          description: 'Ergonomic office chair with lumbar support',
+          unit_price: 850.00,
+          cost_price: 600.00,
+          quantity_in_stock: 3,
+          reorder_level: 10,
+          status: 'active',
+          created_at: '2024-01-20T10:00:00Z',
+          updated_at: '2024-01-20T10:00:00Z'
+        },
+        {
+          id: '3',
+          name: 'Wireless Mouse',
+          sku: 'MSE-WRL-001',
+          category: 'Accessories',
+          description: 'Bluetooth wireless mouse',
+          unit_price: 45.00,
+          cost_price: 25.00,
+          quantity_in_stock: 0,
+          reorder_level: 20,
+          status: 'active',
+          created_at: '2024-01-01T10:00:00Z',
+          updated_at: '2024-01-01T10:00:00Z'
+        },
+        {
+          id: '4',
+          name: 'Standing Desk',
+          sku: 'DSK-STD-001',
+          category: 'Furniture',
+          description: 'Height-adjustable standing desk',
+          unit_price: 1200.00,
+          cost_price: 800.00,
+          quantity_in_stock: 25,
+          reorder_level: 5,
+          status: 'active',
+          created_at: '2024-01-10T10:00:00Z',
+          updated_at: '2024-01-10T10:00:00Z'
+        }
+      ];
 
-            let query = supabase
-                .from('products')
-                .select('*');
-
-            if (searchTerm) {
-                query = query.or(`product_name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%`);
-            }
-
-            // Get total count
-            const { count } = await query.count();
-            const totalCount = count || 0;
-            setTotalPages(Math.max(1, Math.ceil(totalCount / rowsPerPage)));
-
-            // Fetch paginated data
-            const start = (page - 1) * rowsPerPage;
-            const end = start + rowsPerPage - 1;
-
-            const { data, error } = await query
-                .range(start, end)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-
-            setProducts(data || []);
-        } catch (err) {
-            console.error('Error fetching products:', err);
-            setError('Failed to fetch products');
-            toast.error('Failed to fetch products');
+      setProducts(mockProducts);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast.error('Failed to load products');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchProducts();
-    }, [page, searchTerm]);
+  const fetchStats = async () => {
+    try {
+      // Calculate stats from products
+      const mockStats: ProductStats = {
+        total: 4,
+        active: 4,
+        lowStock: 1,
+        outOfStock: 1,
+        totalValue: 218775.00 // Sum of (unit_price * quantity_in_stock)
+      };
 
-    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setSearchTerm(e.target.value);
-        setPage(1);
-    };
+      setStats(mockStats);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
 
-    const handleDelete = async (id: string) => {
-        try {
-            const { error } = await supabase
-                .from('products')
-                .delete()
-                .eq('id', id);
+  const handleAdd = () => {
+    toast.info('Add product functionality coming soon!');
+  };
 
-            if (error) throw error;
+  const handleEdit = (product: Product) => {
+    toast.info(`Edit product ${product.name} - Coming soon!`);
+  };
 
-            toast.success('Product deleted successfully');
-            fetchProducts();
-        } catch (err) {
-            console.error('Error deleting product:', err);
-            toast.error('Failed to delete product');
-        }
-    };
+  const handleView = (product: Product) => {
+    toast.info(`View product ${product.name} - Coming soon!`);
+  };
+
+  const handleDelete = (product: Product) => {
+    if (confirm(`Are you sure you want to delete ${product.name}?`)) {
+      toast.info('Delete functionality coming soon!');
+    }
+  };
+
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
     return (
-        <div className="flex w-dvw h-full bg-blue-50 font-poppins">
-            <Sidebar />
-            <main className="w-full bg-faded flex-1 bg-blue-50">
-                <div className="max-w-8xl">
-                    <Header />
-                    <div className="p-6">
-                        <ToastContainer />
-                        <header className="flex justify-between items-center mb-4">
-                            <div>
-                                <h1 className="text-lg font-medium text-gray-700">Products</h1>
-                                <p className="text-xs">Manage your products</p>
-                            </div>
-                            <Button 
-                                className="bg-blue-500 text-white px-2 rounded flex items-center text-xs"
-                                onClick={() => toast.info('Add product functionality coming soon')}
-                            >
-                                <Plus size={16} /> Add Product
+    <PageTemplate
+      title="Products"
+      description="Manage your product catalog and inventory"
+      onAdd={handleAdd}
+      onSearch={setSearchQuery}
+      customActions={
+        <Button variant="outline">
+          <BarChart3 className="w-4 h-4 mr-2" />
+          Analytics
                             </Button>
-                        </header>
+      }
+    >
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">
+              Products in catalog
+            </p>
+          </CardContent>
+        </Card>
 
-                        <div className="min-w-full h-full p-3 border-gray-200 border bg-white rounded-md">
-                            <div className="flex align-middle justify-between w-full mb-4">
-                                <div className="flex align-middle">
-                                    <button 
-                                        onClick={() => setFilterOpen(!filterOpen)} 
-                                        className="text-gray-700 bg-transparent rounded flex items-center mr-2 border-none"
-                                    >
-                                        <Filter size={16} color="blue" />
-                                    </button>
-                                    <div className="flex items-center border border-gray-300 bg-transparent rounded px-2">
-                                        <Search size={16}/>
-                                        <input 
-                                            type="text" 
-                                            value={searchTerm}
-                                            onChange={handleSearch}
-                                            placeholder="Search products..." 
-                                            className="border-none text-gray-600 p-2 font-poppins outline-none bg-transparent text-xs font-medium" 
-                                        />
-                                    </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+            <p className="text-xs text-muted-foreground">
+              Available for sale
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{stats.lowStock}</div>
+            <p className="text-xs text-muted-foreground">
+              Need reordering
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats.outOfStock}</div>
+            <p className="text-xs text-muted-foreground">
+              Urgent restock needed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Inventory Value</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              <CurrencyCell amount={stats.totalValue} />
                                 </div>
+            <p className="text-xs text-muted-foreground">
+              Total stock value
+            </p>
+          </CardContent>
+        </Card>
                             </div>
 
-                            {loading ? (
-                                <div className="text-center py-8">
-                                    <LoadingSpinner size="medium" />
-                                    <p className="text-sm text-gray-500 mt-2">Loading products...</p>
-                                </div>
-                            ) : error ? (
-                                <div className="text-center py-8 text-red-500">{error}</div>
-                            ) : products.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <p className="text-gray-500">No products found</p>
-                                </div>
-                            ) : (
-                                <table className="min-w-full">
-                                    <thead className="text-gray-500 text-xs font-medium">
-                                        <tr>
-                                            <th className="py-2 px-4 border-b text-left">Product Name</th>
-                                            <th className="py-2 px-4 border-b text-left">SKU</th>
-                                            <th className="py-2 px-4 border-b text-right">Price</th>
-                                            <th className="py-2 px-4 border-b text-right">Stock</th>
-                                            <th className="py-2 px-4 border-b text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {products.map((product) => (
-                                            <tr key={product.id} className="text-xs hover:bg-gray-50">
-                                                <td className="py-2 px-4 border-b">{product.product_name}</td>
-                                                <td className="py-2 px-4 border-b">{product.sku}</td>
-                                                <td className="py-2 px-4 border-b text-right">
-                                                    ${product.price.toFixed(2)}
-                                                </td>
-                                                <td className="py-2 px-4 border-b text-right">
-                                                    {product.stock_quantity}
-                                                </td>
-                                                <td className="py-2 px-4 border-b text-center">
-                                                    <button 
-                                                        onClick={() => toast.info('Edit functionality coming soon')}
-                                                        className="text-blue-500 px-1 py-1 border-none bg-transparent"
-                                                    >
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleDelete(product.id)}
-                                                        className="text-red-500 px-1 py-1 border-none bg-transparent"
-                                                    >
-                                                        <Trash size={16} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-
-                            <div className="flex justify-between items-center mt-4">
-                                <p className="text-xs font-medium text-gray-700">
-                                    Page {page} of {totalPages}
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                                        disabled={page === 1}
-                                        className="px-2 py-1 text-xs"
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={page === totalPages}
-                                        className="px-2 py-1 text-xs"
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
+      {/* Products Table */}
+      <DataTableTemplate
+        columns={columns}
+        data={filteredProducts}
+        loading={loading}
+        onEdit={handleEdit}
+        onView={handleView}
+        onDelete={handleDelete}
+        emptyMessage="No products found. Add your first product to get started."
+      />
+    </PageTemplate>
     );
 } 

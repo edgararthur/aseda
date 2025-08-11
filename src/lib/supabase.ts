@@ -7,6 +7,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default supabase;
 
+// Export commonly used types
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Organization = Database['public']['Tables']['organizations']['Row'];
+export type Contact = Database['public']['Tables']['contacts']['Row'];
+export type Invoice = Database['public']['Tables']['invoices']['Row'];
+export type Product = Database['public']['Tables']['products']['Row'];
+
 export interface Database {
   public: {
     Tables: {
@@ -14,25 +21,37 @@ export interface Database {
       profiles: {
         Row: {
           id: string;
+          user_id: string;
           email: string;
           full_name: string;
           role: 'admin' | 'accountant' | 'manager';
+          organization_id: string | null;
+          is_active: boolean;
+          last_login: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
+          user_id?: string;
           email: string;
           full_name: string;
           role?: 'admin' | 'accountant' | 'manager';
+          organization_id?: string | null;
+          is_active?: boolean;
+          last_login?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
+          user_id?: string;
           email?: string;
           full_name?: string;
           role?: 'admin' | 'accountant' | 'manager';
+          organization_id?: string | null;
+          is_active?: boolean;
+          last_login?: string | null;
           created_at?: string;
           updated_at?: string;
         };

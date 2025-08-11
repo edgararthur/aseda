@@ -4,152 +4,232 @@ import {
     RotateCcw,
     FileText,
     BookOpen,
-    Bank,
+    Landmark,
     Package,
     Users,
     Building2,
     Calculator,
     FileBarChart,
     LogOut,
+    ShoppingCart,
+    Truck,
+    Tags,
+    UserCheck,
+    CreditCard,
+    Briefcase,
+    Coins,
+    PiggyBank,
+    TrendingUp,
+    BarChart3,
+    PieChart,
+    Activity,
+    DollarSign,
+    Wallet,
+    Settings,
+    ChevronDown,
+    ChevronRight,
 } from 'lucide-react';
 
-export const navigation = [
+export interface NavigationItem {
+  title: string;
+  path?: string;
+  icon: any;
+  children?: NavigationItem[];
+  badge?: string;
+  description?: string;
+}
+
+export const navigation: NavigationItem[] = [
     {
         title: 'Dashboard',
-        path: '/',
+        path: '/dashboard',
         icon: LayoutDashboard,
+        description: 'Overview and analytics'
     },
     {
-        title: 'Transactions',
-        icon: Receipt,
+        title: 'Sales & Revenue',
+        icon: TrendingUp,
+        description: 'Manage sales transactions',
         children: [
             {
                 title: 'Invoices',
-                path: '/invoices',
-                icon: FileText,
+                path: '/dashboard/invoices',
+                icon: Receipt,
+                description: 'Create and manage invoices'
             },
             {
                 title: 'Sales Returns',
-                path: '/sales-returns',
+                path: '/dashboard/sales-returns',
                 icon: RotateCcw,
+                description: 'Handle sales returns'
             },
             {
-                title: 'Orders/Quotations',
-                path: '/orders-quotations',
-                icon: FileText,
+                title: 'Orders & Quotations',
+                path: '/dashboard/orders-quotations',
+                icon: ShoppingCart,
+                description: 'Manage orders and quotes'
             },
+        ],
+    },
+    {
+        title: 'Purchases & Expenses',
+        icon: Wallet,
+        description: 'Track purchases and expenses',
+        children: [
             {
                 title: 'Purchase Returns',
-                path: '/purchase-returns',
-                icon: RotateCcw,
+                path: '/dashboard/purchase-returns',
+                icon: Truck,
+                description: 'Handle purchase returns'
             },
             {
-                title: 'Journal Entries',
-                path: '/journal-entries',
-                icon: BookOpen,
-            },
-            {
-                title: 'Bank Reconciliation',
-                path: '/bank-reconciliation',
-                icon: Bank,
+                title: 'Expenses',
+                path: '/dashboard/expenses',
+                icon: CreditCard,
+                description: 'Track business expenses'
             },
         ],
     },
     {
         title: 'Inventory & Products',
         icon: Package,
+        description: 'Manage products and inventory',
         children: [
             {
                 title: 'Products',
-                path: '/products',
+                path: '/dashboard/products',
+                icon: Package,
+                description: 'Product catalog'
             },
             {
                 title: 'Stock Management',
-                path: '/stock-management',
+                path: '/dashboard/stock-management',
+                icon: Activity,
+                description: 'Monitor inventory levels'
             },
             {
                 title: 'Categories',
-                path: '/product-categories',
+                path: '/dashboard/product-categories',
+                icon: Tags,
+                description: 'Product categories'
             },
         ],
     },
     {
-        title: 'Payroll & HR',
+        title: 'Human Resources',
         icon: Users,
+        description: 'Manage staff and payroll',
         children: [
             {
                 title: 'Employees',
-                path: '/employees',
+                path: '/dashboard/employees',
+                icon: UserCheck,
+                description: 'Employee management'
             },
             {
                 title: 'Payroll',
-                path: '/payroll',
+                path: '/dashboard/payroll',
+                icon: DollarSign,
+                description: 'Payroll processing'
             },
             {
                 title: 'Departments',
-                path: '/departments',
+                path: '/dashboard/departments',
+                icon: Briefcase,
+                description: 'Department structure'
             },
         ],
     },
     {
-        title: 'Fixed Assets & Expenses',
+        title: 'Assets & Finance',
         icon: Building2,
+        description: 'Manage assets and finances',
         children: [
             {
                 title: 'Fixed Assets',
-                path: '/fixed-assets',
-            },
-            {
-                title: 'Expenses',
-                path: '/expenses',
+                path: '/dashboard/fixed-assets',
+                icon: Building2,
+                description: 'Track fixed assets'
             },
             {
                 title: 'Asset Categories',
-                path: '/asset-categories',
+                path: '/dashboard/asset-categories',
+                icon: Tags,
+                description: 'Asset classification'
+            },
+            {
+                title: 'Journal Entries',
+                path: '/dashboard/journal-entries',
+                icon: BookOpen,
+                description: 'Financial journal entries'
+            },
+            {
+                title: 'Bank Reconciliation',
+                path: '/dashboard/bank-reconciliation',
+                icon: Landmark,
+                description: 'Reconcile bank accounts'
             },
         ],
     },
     {
         title: 'Tax Management',
         icon: Calculator,
+        description: 'Handle tax compliance',
         children: [
             {
                 title: 'VAT Returns',
-                path: '/vat-returns',
+                path: '/dashboard/vat-returns',
+                icon: Coins,
+                description: 'VAT return filing'
             },
             {
                 title: 'Withholding Tax',
-                path: '/withholding-tax',
+                path: '/dashboard/withholding-tax',
+                icon: PiggyBank,
+                description: 'Withholding tax management'
             },
             {
                 title: 'Tax Settings',
-                path: '/tax-settings',
+                path: '/dashboard/tax-settings',
+                icon: Settings,
+                description: 'Configure tax settings'
             },
         ],
     },
     {
-        title: 'Reports & Financials',
-        icon: FileBarChart,
+        title: 'Reports & Analytics',
+        icon: BarChart3,
+        description: 'Financial reports and analysis',
         children: [
             {
                 title: 'General Ledger',
-                path: '/general-ledger',
+                path: '/dashboard/general-ledger',
+                icon: BookOpen,
+                description: 'Complete transaction history'
             },
             {
                 title: 'Trial Balance',
-                path: '/trial-balance',
+                path: '/dashboard/trial-balance',
+                icon: Activity,
+                description: 'Account balances verification'
             },
             {
                 title: 'Balance Sheet',
-                path: '/balance-sheet',
+                path: '/dashboard/balance-sheet',
+                icon: PieChart,
+                description: 'Financial position report'
             },
             {
                 title: 'Income Statement',
-                path: '/income-statement',
+                path: '/dashboard/income-statement',
+                icon: TrendingUp,
+                description: 'Profit and loss report'
             },
             {
                 title: 'Cash Flow',
-                path: '/cash-flow',
+                path: '/dashboard/cash-flow',
+                icon: Activity,
+                description: 'Cash flow analysis'
             },
         ],
     },

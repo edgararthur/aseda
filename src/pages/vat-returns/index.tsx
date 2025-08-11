@@ -1,205 +1,221 @@
-import { useState, useEffect } from 'react';
-import { PageContainer } from '@/components/common/PageContainer';
-import { DataTable } from '@/components/common/DataTable';
-import supabase from '@/lib/supabase';
-import { formatGHSCurrency } from '@/lib/tax-utils';
-import { Eye, Edit, Trash, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { DataTableTemplate, Column } from '@/components/common/DataTableTemplate';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Coins, FileText, Calendar, DollarSign } from 'lucide-react';
 
 interface VATReturn {
     id: string;
-    period_start: string;
-    period_end: string;
-    due_date: string;
-    filing_date?: string;
-    total_sales: number;
-    total_purchases: number;
-    vat_collected: number;
-    vat_paid: number;
-    net_vat: number;
-    status: string;
-    submitted_by?: string;
-    created_at: string;
+  period: string;
+  startDate: string;
+  endDate: string;
+  dueDate: string;
+  totalSales: number;
+  totalPurchases: number;
+  outputVAT: number;
+  inputVAT: number;
+  netVAT: number;
+  status: 'draft' | 'submitted' | 'approved' | 'overdue';
+  submittedAt?: string;
 }
 
-export default function VATReturns() {
+export default function VATReturnsPage() {
     const [returns, setReturns] = useState<VATReturn[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const ITEMS_PER_PAGE = 10;
 
-    const fetchReturns = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+  useEffect(() => {
+    fetchVATReturns();
+  }, []);
 
-            let query = supabase
-                .from('vat_returns')
-                .select('*', { count: 'exact' });
+  const fetchVATReturns = async () => {
+    try {
+      // Mock VAT returns data
+      const mockReturns: VATReturn[] = [
+        {
+          id: '1',
+          period: 'Q4 2023',
+          startDate: '2023-10-01',
+          endDate: '2023-12-31',
+          dueDate: '2024-01-31',
+          totalSales: 250000,
+          totalPurchases: 150000,
+          outputVAT: 31250,
+          inputVAT: 18750,
+          netVAT: 12500,
+          status: 'submitted',
+          submittedAt: '2024-01-25T10:00:00Z'
+        },
+        {
+          id: '2',
+          period: 'Q1 2024',
+          startDate: '2024-01-01',
+          endDate: '2024-03-31',
+          dueDate: '2024-04-30',
+          totalSales: 280000,
+          totalPurchases: 170000,
+          outputVAT: 35000,
+          inputVAT: 21250,
+          netVAT: 13750,
+          status: 'draft'
+        },
+        {
+          id: '3',
+          period: 'Q2 2024',
+          startDate: '2024-04-01',
+          endDate: '2024-06-30',
+          dueDate: '2024-07-31',
+          totalSales: 300000,
+          totalPurchases: 180000,
+          outputVAT: 37500,
+          inputVAT: 22500,
+          netVAT: 15000,
+          status: 'overdue'
+        }
+      ];
 
-            if (searchTerm) {
-                query = query.or(`period_start.ilike.%${searchTerm}%,period_end.ilike.%${searchTerm}%`);
-            }
-
-            const { data, count, error } = await query
-                .order('period_end', { ascending: false })
-                .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1);
-
-            if (error) throw error;
-
-            setReturns(data || []);
-            setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE));
-        } catch (err) {
-            setError('Failed to fetch VAT returns');
-            console.error('Error:', err);
+      setReturns(mockReturns);
+    } catch (error) {
+      console.error('Error fetching VAT returns:', error);
+      toast.error('Failed to fetch VAT returns');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchReturns();
-    }, [page, searchTerm]);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'submitted':
+        return <Badge className="bg-green-100 text-green-800">Submitted</Badge>;
+      case 'approved':
+        return <Badge className="bg-blue-100 text-blue-800">Approved</Badge>;
+      case 'draft':
+        return <Badge className="bg-yellow-100 text-yellow-800">Draft</Badge>;
+      case 'overdue':
+        return <Badge className="bg-red-100 text-red-800">Overdue</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
 
-    const handleSearch = (term: string) => {
-        setSearchTerm(term);
-        setPage(1);
-    };
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this VAT return?')) return;
-
-        try {
-            const { error } = await supabase
-                .from('vat_returns')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
-            toast.success('VAT return deleted successfully');
-            fetchReturns();
-        } catch (err) {
-            toast.error('Failed to delete VAT return');
-            console.error('Error:', err);
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'submitted': return 'bg-green-100 text-green-800';
-            case 'draft': return 'bg-yellow-100 text-yellow-800';
-            case 'overdue': return 'bg-red-100 text-red-800';
-            default: return 'bg-gray-100 text-gray-800';
-        }
-    };
-
-    const columns = [
-        { 
-            header: 'Period', 
-            accessor: (item: VATReturn) => (
-                `${new Date(item.period_start).toLocaleDateString()} - ${new Date(item.period_end).toLocaleDateString()}`
-            )
-        },
-        { 
-            header: 'Due Date', 
-            accessor: (item: VATReturn) => new Date(item.due_date).toLocaleDateString()
-        },
-        { 
-            header: 'Filing Date', 
-            accessor: (item: VATReturn) => item.filing_date ? new Date(item.filing_date).toLocaleDateString() : '-'
-        },
-        { 
-            header: 'Total Sales', 
-            accessor: (item: VATReturn) => formatGHSCurrency(item.total_sales),
-            align: 'right' as const
-        },
-        { 
-            header: 'VAT Collected', 
-            accessor: (item: VATReturn) => formatGHSCurrency(item.vat_collected),
-            align: 'right' as const
-        },
-        { 
-            header: 'VAT Paid', 
-            accessor: (item: VATReturn) => formatGHSCurrency(item.vat_paid),
-            align: 'right' as const
-        },
-        { 
-            header: 'Net VAT', 
-            accessor: (item: VATReturn) => formatGHSCurrency(item.net_vat),
-            align: 'right' as const
-        },
-        {
-            header: 'Status',
-            accessor: (item: VATReturn) => (
-                <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>
-                    {item.status}
+  const columns: Column[] = [
+    {
+      key: 'period',
+      label: 'Period',
+      render: (vatReturn) => vatReturn.period
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (vatReturn) => new Date(vatReturn.dueDate).toLocaleDateString()
+    },
+    {
+      key: 'totalSales',
+      label: 'Total Sales',
+      render: (vatReturn) => `₵${vatReturn.totalSales.toLocaleString()}`
+    },
+    {
+      key: 'outputVAT',
+      label: 'Output VAT',
+      render: (vatReturn) => `₵${vatReturn.outputVAT.toLocaleString()}`
+    },
+    {
+      key: 'inputVAT',
+      label: 'Input VAT',
+      render: (vatReturn) => `₵${vatReturn.inputVAT.toLocaleString()}`
+    },
+    {
+      key: 'netVAT',
+      label: 'Net VAT',
+      render: (vatReturn) => (
+        <span className={vatReturn.netVAT >= 0 ? 'text-red-600' : 'text-green-600'}>
+          ₵{Math.abs(vatReturn.netVAT).toLocaleString()}
+          {vatReturn.netVAT >= 0 ? ' (Payable)' : ' (Refund)'}
                 </span>
             )
         },
         {
-            header: 'Actions',
-            accessor: (item: VATReturn) => (
-                <div className="flex gap-2">
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('View return:', item.id)}
-                    >
-                        <Eye size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('Edit return:', item.id)}
-                        disabled={item.status === 'submitted'}
-                    >
-                        <Edit size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('Generate GRA form:', item.id)}
-                    >
-                        <FileText size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleDelete(item.id)}
-                        disabled={item.status === 'submitted'}
-                        className="text-red-500 hover:text-red-700"
-                    >
-                        <Trash size={16} />
-                    </Button>
-                </div>
-            ),
-            align: 'center' as const
-        }
-    ];
+      key: 'status',
+      label: 'Status',
+      render: (vatReturn) => getStatusBadge(vatReturn.status)
+    }
+  ];
+
+  const totalNetVAT = returns.reduce((sum, ret) => sum + ret.netVAT, 0);
+  const pendingReturns = returns.filter(ret => ret.status === 'draft' || ret.status === 'overdue').length;
+  const overdueReturns = returns.filter(ret => ret.status === 'overdue').length;
 
     return (
-        <PageContainer
+    <PageTemplate
             title="VAT Returns"
-            description="Manage your Value Added Tax (VAT) returns and filings"
-            onNew={() => console.log('Create new VAT return')}
-            onExport={() => console.log('Export VAT returns')}
-        >
-            <DataTable
+      description="Manage VAT returns, track submissions, and monitor compliance deadlines."
+      onSearch={setSearchTerm}
+      showAddButton={false}
+      showExportImport={true}
+    >
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Returns</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{returns.length}</div>
+            <p className="text-xs text-muted-foreground">VAT returns filed</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net VAT Position</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${totalNetVAT >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+              ₵{Math.abs(totalNetVAT).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalNetVAT >= 0 ? 'Payable' : 'Refundable'}
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Returns</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{pendingReturns}</div>
+            <p className="text-xs text-muted-foreground">Need attention</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Overdue Returns</CardTitle>
+            <Coins className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{overdueReturns}</div>
+            <p className="text-xs text-muted-foreground">Urgent action needed</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Data Table */}
+      <DataTableTemplate
+        data={returns.filter(ret => 
+          ret.period.toLowerCase().includes(searchTerm.toLowerCase())
+        )}
                 columns={columns}
-                data={returns}
                 loading={loading}
-                error={error}
-                onSearch={handleSearch}
-                searchPlaceholder="Search by period..."
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-            />
-        </PageContainer>
+        emptyMessage="No VAT returns found"
+      />
+    </PageTemplate>
     );
 } 

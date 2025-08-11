@@ -10,10 +10,10 @@ import {
   onAuthStateChange,
   type AuthUser,
   type SignInCredentials,
+  type SignUpData,
 } from '@/lib/auth';
 import { User } from '@supabase/supabase-js';
-import supabase from '@/lib/supabase';
-import type { Profile } from '../lib/supabase';
+import supabase, { type Profile } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
@@ -22,13 +22,15 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   signIn: (credentials: SignInCredentials) => Promise<void>;
-  signUp: (credentials: SignInCredentials & { full_name: string }) => Promise<void>;
+  signUp: (credentials: SignUpData) => Promise<void>;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   clearError: () => void;
   isAdmin: () => boolean;
+  hasRole: (role: string) => boolean;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,22 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Set up auth state listener
-    const unsubscribe = onAuthStateChange((user) => {
-      setUser(user);
-      if (user) {
-        navigate('/dashboard');
-      } else {
-        navigate('/login');
-      }
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribe.data?.subscription.unsubscribe();
-    };
-  }, [navigate]);
+  // Removed conflicting auth state listener to prevent navigation conflicts
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -63,7 +50,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;
-        setUser(session?.user ?? null);
+        setUser(session?.user ? {
+          id: session.user.id,
+          email: session.user.email || '',
+          role: 'user',
+          full_name: session.user.user_metadata?.full_name || session.user.email || ''
+        } : null);
         if (session?.user) {
           await fetchProfile(session.user.id);
         }
@@ -78,13 +70,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-        navigate('/');
-      } else {
-        setProfile(null);
-        navigate('/auth/login');
+      console.log('Auth state changed:', event, session);
+      setLoading(true);
+      
+      try {
+        const user = session?.user;
+        if (user?.email) {
+          const authUser: AuthUser = {
+            id: user.id,
+            email: user.email,
+            role: 'user',
+            full_name: user.user_metadata?.full_name || user.email.split('@')[0]
+          };
+          setUser(authUser);
+          await fetchProfile(user.id);
+          
+          // Navigate only on specific events to prevent loops
+          if (event === 'SIGNED_IN') {
+            navigate('/dashboard');
+          }
+        } else {
+          setUser(null);
+          setProfile(null);
+          
+          // Only navigate to login on sign out, not on initial load
+          if (event === 'SIGNED_OUT') {
+            navigate('/login');
+          }
+        }
+      } catch (error) {
+        console.error('Error in auth state change:', error);
+        setError(error instanceof Error ? error.message : 'Authentication error');
+      } finally {
+        setLoading(false);
       }
     });
 
@@ -98,8 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role')
-        .eq('id', userId)
+        .select('id, user_id, email, full_name, role, organization_id, is_active, last_login, created_at, updated_at')
+        .eq('user_id', userId)
         .single();
 
       if (error) {
@@ -109,16 +127,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data) {
         console.log('Profile data:', data);
-        setProfile(data);
+        setProfile(data as Profile);
       } else {
         console.warn('No profile data found for user ID:', userId);
-        setProfile(null);
+        // Create a profile for the user if one doesn't exist
+        await createProfileForUser(userId);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
-    } finally {
-      setLoading(false);
+    }
+  }
+
+  async function createProfileForUser(userId: string) {
+    try {
+      console.log('Creating profile for user ID:', userId);
+      
+      // Get user data from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+
+      // Create a new profile
+      const newProfile = {
+        user_id: userId,
+        email: user.email!,
+        full_name: user.user_metadata?.full_name || user.email!.split('@')[0],
+        role: 'accountant' as const,
+        organization_id: null, // Will be set when user creates/joins an organization
+        is_active: true
+      };
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert([newProfile])
+        .select('id, user_id, email, full_name, role, organization_id, is_active, last_login, created_at, updated_at')
+        .single();
+
+      if (error) {
+        console.error('Error creating profile:', error);
+        throw error;
+      }
+
+      if (data) {
+        console.log('Profile created successfully:', data);
+        setProfile(data as Profile);
+      }
+    } catch (error) {
+      console.error('Error creating profile for user:', error);
+      setProfile(null);
     }
   }
 
@@ -175,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (credentials: SignInCredentials & { full_name: string }) => {
+  const signUp = async (credentials: SignUpData) => {
     try {
       setLoading(true);
       clearError();
@@ -234,6 +290,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return profile?.role === 'admin';
   };
 
+  const hasRole = (role: string) => {
+    return profile?.role === role;
+  };
+
+  const hasPermission = (permission: string) => {
+    // Define role-based permissions
+    const rolePermissions: Record<string, string[]> = {
+      admin: ['*'], // Admin has all permissions
+      accountant: [
+        'invoices:read', 'invoices:write', 'invoices:delete',
+        'expenses:read', 'expenses:write', 'expenses:delete',
+        'transactions:read', 'transactions:write', 'transactions:delete',
+        'ledger:read', 'ledger:write', 'ledger:delete',
+        'reports:read', 'reports:export',
+        'payroll:read', 'payroll:write'
+      ],
+      manager: [
+        'invoices:read', 'invoices:write',
+        'expenses:read', 'expenses:write',
+        'transactions:read', 'transactions:write',
+        'ledger:read',
+        'reports:read', 'reports:export',
+        'payroll:read',
+        'employees:read'
+      ],
+      staff: [
+        'invoices:read',
+        'expenses:read', 'expenses:write',
+        'transactions:read',
+        'reports:read'
+      ],
+      viewer: [
+        'invoices:read',
+        'expenses:read',
+        'transactions:read',
+        'reports:read'
+      ]
+    };
+
+    const userRole = profile?.role || 'viewer';
+    const permissions = rolePermissions[userRole] || [];
+    
+    // Admin has all permissions
+    if (permissions.includes('*')) {
+      return true;
+    }
+    
+    return permissions.includes(permission);
+  };
+
   const value = {
     user,
     profile,
@@ -247,6 +353,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updatePassword,
     clearError,
     isAdmin,
+    hasRole,
+    hasPermission,
   };
 
   // console.log('The Loading state:', loading);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ban as Bank, RefreshCw, Link2, AlertCircle } from 'lucide-react';
+import { Landmark as Bank, RefreshCw, Link2, AlertCircle } from 'lucide-react';
 
 interface BankAccount {
   id: string;

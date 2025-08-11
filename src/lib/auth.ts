@@ -86,7 +86,17 @@ export async function signIn({ email, password }: SignInCredentials): Promise<{ 
   }
 }
 
-export async function signUp(credentials: SignInCredentials & { full_name: string }): Promise<AuthResponse> {
+export type SignUpData = SignInCredentials & { 
+  full_name: string;
+  role?: string;
+  organization_name?: string;
+  business_type?: string;
+  tax_number?: string;
+  phone?: string;
+  address?: string;
+};
+
+export async function signUp(credentials: SignUpData): Promise<AuthResponse> {
   const { data, error } = await supabase.auth.signUp({
     email: credentials.email,
     password: credentials.password,
@@ -99,22 +109,57 @@ export async function signUp(credentials: SignInCredentials & { full_name: strin
 
   if (error) throw error;
 
-  // Create profile after successful signup
+  // Create organization and profile after successful signup
   if (data.user) {
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert([
-        {
-          id: data.user.id,
-          email: data.user.email,
-          full_name: credentials.full_name,
-          role: 'user',
-        },
-      ]);
+    try {
+      let organizationId = null;
 
-    if (profileError) {
-      console.error('Error creating profile:', profileError);
-      throw profileError;
+      // Create organization if data provided
+      if (credentials.organization_name) {
+        const { data: orgData, error: orgError } = await supabase
+          .from('organizations')
+          .insert([
+            {
+              name: credentials.organization_name,
+              business_type: credentials.business_type || 'company',
+              tax_number: credentials.tax_number,
+              phone: credentials.phone,
+              address: credentials.address,
+              email: credentials.email,
+            },
+          ])
+          .select()
+          .single();
+
+        if (orgError) {
+          console.error('Error creating organization:', orgError);
+          throw orgError;
+        }
+        organizationId = orgData.id;
+      }
+
+      // Create user profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: data.user.id,
+            user_id: data.user.id,
+            email: data.user.email,
+            full_name: credentials.full_name,
+            role: credentials.role || 'accountant',
+            organization_id: organizationId,
+          },
+        ]);
+
+      if (profileError) {
+        console.error('Error creating profile:', profileError);
+        throw profileError;
+      }
+    } catch (setupError) {
+      // If there's an error with organization/profile creation, we should clean up
+      console.error('Error during user setup:', setupError);
+      throw setupError;
     }
   }
 

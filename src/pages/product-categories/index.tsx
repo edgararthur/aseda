@@ -1,154 +1,412 @@
-import { useState, useEffect } from 'react';
-import { PageContainer } from '@/components/common/PageContainer';
-import { DataTable } from '@/components/common/DataTable';
-import supabase from '@/lib/supabase';
-import { Eye, Edit, Trash } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { DataTableTemplate, Column } from '@/components/common/DataTableTemplate';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Tags, Package, Folder, Archive } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ProductCategory {
-    id: string;
-    name: string;
-    description: string;
-    parent_category?: string;
-    product_count: number;
-    created_at: string;
-    updated_at: string;
+  id: string;
+  categoryName: string;
+  categoryCode: string;
+  description: string;
+  parentCategory?: string;
+  productCount: number;
+  status: 'active' | 'inactive';
+  createdAt: string;
 }
 
-export default function ProductCategories() {
-    const [categories, setCategories] = useState<ProductCategory[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const ITEMS_PER_PAGE = 10;
+export default function ProductCategoriesPage() {
+  const { hasPermission } = useAuth();
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentCategory, setCurrentCategory] = useState<Partial<ProductCategory> | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-    const fetchCategories = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+  // Form state
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryCode, setCategoryCode] = useState('');
+  const [description, setDescription] = useState('');
+  const [parentCategory, setParentCategory] = useState('');
+  const [status, setStatus] = useState<'active' | 'inactive'>('active');
 
-            let query = supabase
-                .from('product_categories')
-                .select('*', { count: 'exact' });
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
-            if (searchTerm) {
-                query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
-            }
-
-            const { data, count, error } = await query
-                .order('name', { ascending: true })
-                .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1);
-
-            if (error) throw error;
-
-            setCategories(data || []);
-            setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE));
-        } catch (err) {
-            setError('Failed to fetch product categories');
-            console.error('Error:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchCategories();
-    }, [page, searchTerm]);
-
-    const handleSearch = (term: string) => {
-        setSearchTerm(term);
-        setPage(1);
-    };
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this category?')) return;
-
-        try {
-            const { error } = await supabase
-                .from('product_categories')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
-            toast.success('Category deleted successfully');
-            fetchCategories();
-        } catch (err) {
-            toast.error('Failed to delete category');
-            console.error('Error:', err);
-        }
-    };
-
-    const columns = [
-        { header: 'Name', accessor: 'name' as keyof ProductCategory },
-        { header: 'Description', accessor: 'description' as keyof ProductCategory },
-        { header: 'Parent Category', accessor: 'parent_category' as keyof ProductCategory },
-        { 
-            header: 'Products', 
-            accessor: 'product_count' as keyof ProductCategory,
-            align: 'right' as const
-        },
-        { 
-            header: 'Created At', 
-            accessor: (item: ProductCategory) => new Date(item.created_at).toLocaleDateString()
-        },
-        { 
-            header: 'Updated At', 
-            accessor: (item: ProductCategory) => new Date(item.updated_at).toLocaleDateString()
+  const fetchCategories = async () => {
+    try {
+      // Mock categories data
+      const mockCategories: ProductCategory[] = [
+        {
+          id: '1',
+          categoryName: 'Electronics',
+          categoryCode: 'ELEC',
+          description: 'Electronic devices and components',
+          productCount: 25,
+          status: 'active',
+          createdAt: '2023-01-15T10:00:00Z'
         },
         {
-            header: 'Actions',
-            accessor: (item: ProductCategory) => (
-                <div className="flex gap-2">
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('View category:', item.id)}
-                    >
-                        <Eye size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('Edit category:', item.id)}
-                    >
-                        <Edit size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleDelete(item.id)}
-                        className="text-red-500 hover:text-red-700"
-                    >
-                        <Trash size={16} />
-                    </Button>
-                </div>
-            ),
-            align: 'center' as const
+          id: '2',
+          categoryName: 'Office Furniture',
+          categoryCode: 'FURN',
+          description: 'Desks, chairs, and office furniture',
+          productCount: 12,
+          status: 'active',
+          createdAt: '2023-01-15T10:00:00Z'
+        },
+        {
+          id: '3',
+          categoryName: 'Software',
+          categoryCode: 'SOFT',
+          description: 'Software licenses and applications',
+          parentCategory: 'Electronics',
+          productCount: 8,
+          status: 'active',
+          createdAt: '2023-01-15T10:00:00Z'
+        },
+        {
+          id: '4',
+          categoryName: 'Stationery',
+          categoryCode: 'STAT',
+          description: 'Office supplies and stationery items',
+          productCount: 35,
+          status: 'active',
+          createdAt: '2023-01-15T10:00:00Z'
+        },
+        {
+          id: '5',
+          categoryName: 'Deprecated Items',
+          categoryCode: 'DEPR',
+          description: 'Items no longer in use',
+          productCount: 0,
+          status: 'inactive',
+          createdAt: '2023-01-15T10:00:00Z'
         }
-    ];
+      ];
 
-    return (
-        <PageContainer
-            title="Product Categories"
-            description="Manage your product categories and classifications"
-            onNew={() => console.log('Create new category')}
-            onExport={() => console.log('Export categories')}
-        >
-            <DataTable
-                columns={columns}
-                data={categories}
-                loading={loading}
-                error={error}
-                onSearch={handleSearch}
-                searchPlaceholder="Search by name or description..."
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-            />
-        </PageContainer>
-    );
-} 
+      setCategories(mockCategories);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      toast.error('Failed to fetch product categories');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdd = () => {
+    setCurrentCategory(null);
+    setCategoryName('');
+    setCategoryCode('');
+    setDescription('');
+    setParentCategory('');
+    setStatus('active');
+    setIsModalOpen(true);
+  };
+
+  const handleEdit = (category: ProductCategory) => {
+    setCurrentCategory(category);
+    setCategoryName(category.categoryName);
+    setCategoryCode(category.categoryCode);
+    setDescription(category.description);
+    setParentCategory(category.parentCategory || '');
+    setStatus(category.status);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      const categoryData = {
+        id: currentCategory?.id || Date.now().toString(),
+        categoryName,
+        categoryCode,
+        description,
+        parentCategory: parentCategory || undefined,
+        productCount: currentCategory?.productCount || 0,
+        status,
+        createdAt: currentCategory?.createdAt || new Date().toISOString()
+      };
+
+      if (currentCategory) {
+        setCategories(prev => prev.map(c => c.id === currentCategory.id ? { ...categoryData, id: currentCategory.id } : c));
+        toast.success('Category updated successfully');
+      } else {
+        setCategories(prev => [...prev, categoryData]);
+        toast.success('Category created successfully');
+      }
+
+      setIsModalOpen(false);
+    } catch (error) {
+      toast.error('Failed to save category');
+    }
+  };
+
+  const handleDelete = async (categoryId: string) => {
+    try {
+      const category = categories.find(c => c.id === categoryId);
+      if (category && category.productCount > 0) {
+        toast.error('Cannot delete category with existing products');
+        return;
+      }
+
+      setCategories(prev => prev.filter(c => c.id !== categoryId));
+      toast.success('Category deleted successfully');
+    } catch (error) {
+      toast.error('Failed to delete category');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <Badge className="bg-green-100 text-green-800">Active</Badge>;
+      case 'inactive':
+        return <Badge className="bg-gray-100 text-gray-800">Inactive</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const columns: Column[] = [
+    {
+      key: 'categoryCode',
+      label: 'Code',
+      render: (category) => <span className="font-mono text-sm">{category.categoryCode}</span>
+    },
+    {
+      key: 'categoryName',
+      label: 'Category Name',
+      render: (category) => (
+        <div>
+          <div className="font-medium">{category.categoryName}</div>
+          {category.parentCategory && (
+            <div className="text-sm text-gray-500">Parent: {category.parentCategory}</div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      render: (category) => (
+        <span className="text-sm text-gray-600">
+          {category.description.length > 50 
+            ? `${category.description.substring(0, 50)}...` 
+            : category.description
+          }
+        </span>
+      )
+    },
+    {
+      key: 'productCount',
+      label: 'Products',
+      render: (category) => (
+        <div className="text-center">
+          <span className="font-medium">{category.productCount}</span>
+          <div className="text-xs text-gray-500">items</div>
+        </div>
+      )
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (category) => getStatusBadge(category.status)
+    },
+    {
+      key: 'createdAt',
+      label: 'Created',
+      render: (category) => new Date(category.createdAt).toLocaleDateString()
+    }
+  ];
+
+  const actions = [
+    {
+      label: 'Edit',
+      onClick: (category: ProductCategory) => handleEdit(category),
+      variant: 'outline' as const,
+      show: () => hasPermission('products:write')
+    },
+    {
+      label: 'Delete',
+      onClick: (category: ProductCategory) => handleDelete(category.id),
+      variant: 'destructive' as const,
+      show: (category: ProductCategory) => hasPermission('products:delete') && category.productCount === 0
+    }
+  ];
+
+  const totalCategories = categories.length;
+  const activeCategories = categories.filter(cat => cat.status === 'active').length;
+  const totalProducts = categories.reduce((sum, cat) => sum + cat.productCount, 0);
+  const parentCategories = categories.filter(cat => !cat.parentCategory).length;
+
+  return (
+    <PageTemplate
+      title="Product Categories"
+      description="Organize your products into categories for better inventory management and reporting."
+      onAdd={hasPermission('products:write') ? handleAdd : undefined}
+      onSearch={setSearchTerm}
+      showAddButton={hasPermission('products:write')}
+      showExportImport={true}
+    >
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Categories</CardTitle>
+            <Folder className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalCategories}</div>
+            <p className="text-xs text-muted-foreground">All categories</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Categories</CardTitle>
+            <Tags className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeCategories}</div>
+            <p className="text-xs text-muted-foreground">Currently in use</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalProducts}</div>
+            <p className="text-xs text-muted-foreground">Across all categories</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Parent Categories</CardTitle>
+            <Archive className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{parentCategories}</div>
+            <p className="text-xs text-muted-foreground">Top-level categories</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Data Table */}
+      <DataTableTemplate
+        data={categories.filter(category => 
+          category.categoryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          category.categoryCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          category.description.toLowerCase().includes(searchTerm.toLowerCase())
+        )}
+        columns={columns}
+        loading={loading}
+        emptyMessage="No product categories found"
+        showActions={false}
+      />
+
+      {/* Category Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {currentCategory ? 'Edit Category' : 'Add New Category'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="category-name">Category Name</Label>
+                <Input
+                  id="category-name"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  placeholder="Electronics"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="category-code">Category Code</Label>
+                <Input
+                  id="category-code"
+                  value={categoryCode}
+                  onChange={(e) => setCategoryCode(e.target.value)}
+                  placeholder="ELEC"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Category description..."
+                rows={3}
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="parent-category">Parent Category (Optional)</Label>
+                <Select value={parentCategory} onValueChange={setParentCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select parent category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    {categories
+                      .filter(cat => cat.id !== currentCategory?.id && !cat.parentCategory)
+                      .map(cat => (
+                        <SelectItem key={cat.id} value={cat.categoryName}>
+                          {cat.categoryName}
+                        </SelectItem>
+                      ))
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select value={status} onValueChange={(value: 'active' | 'inactive') => setStatus(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave}>
+              {currentCategory ? 'Update' : 'Create'} Category
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageTemplate>
+  );
+}

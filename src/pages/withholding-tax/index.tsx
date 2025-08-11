@@ -1,191 +1,222 @@
-import { useState, useEffect } from 'react';
-import { PageContainer } from '@/components/common/PageContainer';
-import { DataTable } from '@/components/common/DataTable';
-import supabase from '@/lib/supabase';
-import { formatGHSCurrency } from '@/lib/tax-utils';
-import { Eye, Edit, Trash, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from 'react';
+import { PageTemplate } from '@/components/common/PageTemplate';
+import { DataTableTemplate, Column } from '@/components/common/DataTableTemplate';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { PiggyBank, FileText, DollarSign, Percent } from 'lucide-react';
 
 interface WithholdingTax {
     id: string;
-    date: string;
-    reference_no: string;
-    supplier: string;
-    description: string;
-    payment_amount: number;
-    tax_rate: number;
-    tax_amount: number;
-    status: string;
-    certificate_no?: string;
-    submitted_by?: string;
-    created_at: string;
+  supplierName: string;
+  invoiceNumber: string;
+  invoiceAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  taxType: 'VAT' | 'Income Tax' | 'NHIL' | 'GetFund';
+  status: 'pending' | 'filed' | 'paid';
+  dueDate: string;
+  filedDate?: string;
 }
 
-export default function WithholdingTax() {
+export default function WithholdingTaxPage() {
     const [taxes, setTaxes] = useState<WithholdingTax[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const ITEMS_PER_PAGE = 10;
 
-    const fetchTaxes = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+  useEffect(() => {
+    fetchWithholdingTaxes();
+  }, []);
 
-            let query = supabase
-                .from('withholding_taxes')
-                .select('*', { count: 'exact' });
+  const fetchWithholdingTaxes = async () => {
+    try {
+      // Mock withholding tax data
+      const mockTaxes: WithholdingTax[] = [
+        {
+          id: '1',
+          supplierName: 'ABC Construction Ltd',
+          invoiceNumber: 'INV-2024-001',
+          invoiceAmount: 50000,
+          taxRate: 5,
+          taxAmount: 2500,
+          taxType: 'VAT',
+          status: 'filed',
+          dueDate: '2024-02-15',
+          filedDate: '2024-02-10'
+        },
+        {
+          id: '2',
+          supplierName: 'Tech Solutions Ghana',
+          invoiceNumber: 'INV-2024-002',
+          invoiceAmount: 30000,
+          taxRate: 5,
+          taxAmount: 1500,
+          taxType: 'Income Tax',
+          status: 'pending',
+          dueDate: '2024-02-28'
+        },
+        {
+          id: '3',
+          supplierName: 'Office Supplies Co.',
+          invoiceNumber: 'INV-2024-003',
+          invoiceAmount: 8000,
+          taxRate: 2.5,
+          taxAmount: 200,
+          taxType: 'NHIL',
+          status: 'paid',
+          dueDate: '2024-02-20',
+          filedDate: '2024-02-15'
+        }
+      ];
 
-            if (searchTerm) {
-                query = query.or(`reference_no.ilike.%${searchTerm}%,supplier.ilike.%${searchTerm}%`);
-            }
-
-            const { data, count, error } = await query
-                .order('date', { ascending: false })
-                .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1);
-
-            if (error) throw error;
-
-            setTaxes(data || []);
-            setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE));
-        } catch (err) {
-            setError('Failed to fetch withholding taxes');
-            console.error('Error:', err);
+      setTaxes(mockTaxes);
+    } catch (error) {
+      console.error('Error fetching withholding taxes:', error);
+      toast.error('Failed to fetch withholding tax data');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchTaxes();
-    }, [page, searchTerm]);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'filed':
+        return <Badge className="bg-blue-100 text-blue-800">Filed</Badge>;
+      case 'paid':
+        return <Badge className="bg-green-100 text-green-800">Paid</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
 
-    const handleSearch = (term: string) => {
-        setSearchTerm(term);
-        setPage(1);
+  const getTaxTypeBadge = (taxType: string) => {
+    const colors = {
+      'VAT': 'bg-purple-100 text-purple-800',
+      'Income Tax': 'bg-orange-100 text-orange-800',
+      'NHIL': 'bg-blue-100 text-blue-800',
+      'GetFund': 'bg-green-100 text-green-800'
     };
+    return <Badge className={colors[taxType as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>{taxType}</Badge>;
+  };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this withholding tax record?')) return;
+  const columns: Column[] = [
+    {
+      key: 'supplierName',
+      label: 'Supplier',
+      render: (tax) => tax.supplierName
+    },
+    {
+      key: 'invoiceNumber',
+      label: 'Invoice Number',
+      render: (tax) => <span className="font-mono text-sm">{tax.invoiceNumber}</span>
+    },
+    {
+      key: 'invoiceAmount',
+      label: 'Invoice Amount',
+      render: (tax) => `₵${tax.invoiceAmount.toLocaleString()}`
+    },
+    {
+      key: 'taxType',
+      label: 'Tax Type',
+      render: (tax) => getTaxTypeBadge(tax.taxType)
+    },
+    {
+      key: 'taxRate',
+      label: 'Tax Rate',
+      render: (tax) => `${tax.taxRate}%`
+    },
+    {
+      key: 'taxAmount',
+      label: 'Tax Amount',
+      render: (tax) => `₵${tax.taxAmount.toLocaleString()}`
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (tax) => new Date(tax.dueDate).toLocaleDateString()
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (tax) => getStatusBadge(tax.status)
+    }
+  ];
 
-        try {
-            const { error } = await supabase
-                .from('withholding_taxes')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
-            toast.success('Withholding tax record deleted successfully');
-            fetchTaxes();
-        } catch (err) {
-            toast.error('Failed to delete withholding tax record');
-            console.error('Error:', err);
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'submitted': return 'bg-green-100 text-green-800';
-            case 'draft': return 'bg-yellow-100 text-yellow-800';
-            case 'cancelled': return 'bg-red-100 text-red-800';
-            default: return 'bg-gray-100 text-gray-800';
-        }
-    };
-
-    const columns = [
-        { header: 'Reference No', accessor: 'reference_no' as keyof WithholdingTax },
-        { header: 'Date', accessor: (item: WithholdingTax) => new Date(item.date).toLocaleDateString() },
-        { header: 'Supplier', accessor: 'supplier' as keyof WithholdingTax },
-        { header: 'Description', accessor: 'description' as keyof WithholdingTax },
-        { 
-            header: 'Payment Amount', 
-            accessor: (item: WithholdingTax) => formatGHSCurrency(item.payment_amount),
-            align: 'right' as const
-        },
-        { 
-            header: 'Tax Rate', 
-            accessor: (item: WithholdingTax) => `${item.tax_rate}%`,
-            align: 'right' as const
-        },
-        { 
-            header: 'Tax Amount', 
-            accessor: (item: WithholdingTax) => formatGHSCurrency(item.tax_amount),
-            align: 'right' as const
-        },
-        {
-            header: 'Status',
-            accessor: (item: WithholdingTax) => (
-                <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>
-                    {item.status}
-                </span>
-            )
-        },
-        { header: 'Certificate No', accessor: 'certificate_no' as keyof WithholdingTax },
-        {
-            header: 'Actions',
-            accessor: (item: WithholdingTax) => (
-                <div className="flex gap-2">
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('View record:', item.id)}
-                    >
-                        <Eye size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('Edit record:', item.id)}
-                        disabled={item.status === 'submitted'}
-                    >
-                        <Edit size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => console.log('Generate certificate:', item.id)}
-                        disabled={item.status !== 'submitted'}
-                    >
-                        <FileText size={16} />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleDelete(item.id)}
-                        disabled={item.status === 'submitted'}
-                        className="text-red-500 hover:text-red-700"
-                    >
-                        <Trash size={16} />
-                    </Button>
-                </div>
-            ),
-            align: 'center' as const
-        }
-    ];
+  const totalTaxAmount = taxes.reduce((sum, tax) => sum + tax.taxAmount, 0);
+  const pendingTaxes = taxes.filter(tax => tax.status === 'pending').length;
+  const overdueCount = taxes.filter(tax => 
+    tax.status === 'pending' && new Date(tax.dueDate) < new Date()
+  ).length;
 
     return (
-        <PageContainer
+    <PageTemplate
             title="Withholding Tax"
-            description="Manage your withholding tax records and certificates"
-            onNew={() => console.log('Create new withholding tax record')}
-            onExport={() => console.log('Export withholding tax records')}
-        >
-            <DataTable
+      description="Manage withholding tax obligations, track payments, and ensure compliance."
+      onSearch={setSearchTerm}
+      showAddButton={false}
+      showExportImport={true}
+    >
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Obligations</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{taxes.length}</div>
+            <p className="text-xs text-muted-foreground">Tax obligations</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Tax Amount</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₵{totalTaxAmount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Withheld to date</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
+            <PiggyBank className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{pendingTaxes}</div>
+            <p className="text-xs text-muted-foreground">Awaiting payment</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Overdue Items</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{overdueCount}</div>
+            <p className="text-xs text-muted-foreground">Require attention</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Data Table */}
+      <DataTableTemplate
+        data={taxes.filter(tax => 
+          tax.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          tax.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          tax.taxType.toLowerCase().includes(searchTerm.toLowerCase())
+        )}
                 columns={columns}
-                data={taxes}
                 loading={loading}
-                error={error}
-                onSearch={handleSearch}
-                searchPlaceholder="Search by reference no or supplier..."
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-            />
-        </PageContainer>
+        emptyMessage="No withholding tax records found"
+      />
+    </PageTemplate>
     );
 } 
