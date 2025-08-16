@@ -106,42 +106,42 @@ export default function WithholdingTaxPage() {
     {
       key: 'supplierName',
       label: 'Supplier',
-      render: (tax) => tax.supplierName
+      render: (value, tax) => value || 'N/A'
     },
     {
       key: 'invoiceNumber',
       label: 'Invoice Number',
-      render: (tax) => <span className="font-mono text-sm">{tax.invoiceNumber}</span>
+      render: (value, tax) => <span className="font-mono text-sm">{value || 'N/A'}</span>
     },
     {
       key: 'invoiceAmount',
       label: 'Invoice Amount',
-      render: (tax) => `₵${tax.invoiceAmount.toLocaleString()}`
+      render: (value, tax) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'taxType',
       label: 'Tax Type',
-      render: (tax) => getTaxTypeBadge(tax.taxType)
+      render: (value, tax) => getTaxTypeBadge(value || 'services')
     },
     {
       key: 'taxRate',
       label: 'Tax Rate',
-      render: (tax) => `${tax.taxRate}%`
+      render: (value, tax) => `${value ?? 0}%`
     },
     {
       key: 'taxAmount',
       label: 'Tax Amount',
-      render: (tax) => `₵${tax.taxAmount.toLocaleString()}`
+      render: (value, tax) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'dueDate',
       label: 'Due Date',
-      render: (tax) => new Date(tax.dueDate).toLocaleDateString()
+      render: (value, tax) => value ? new Date(value).toLocaleDateString() : 'N/A'
     },
     {
       key: 'status',
       label: 'Status',
-      render: (tax) => getStatusBadge(tax.status)
+      render: (value, tax) => getStatusBadge(value || 'pending')
     }
   ];
 

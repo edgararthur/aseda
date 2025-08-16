@@ -91,7 +91,7 @@ export function PurchaseReturnFilters({ onApply, onReset }: PurchaseReturnFilter
                             <SelectValue placeholder="All statuses" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All</SelectItem>
+                            <SelectItem value="all">All</SelectItem>
                             <SelectItem value="PENDING">Pending</SelectItem>
                             <SelectItem value="COMPLETED">Completed</SelectItem>
                             <SelectItem value="CANCELLED">Cancelled</SelectItem>

@@ -105,42 +105,42 @@ export default function VATReturnsPage() {
     {
       key: 'period',
       label: 'Period',
-      render: (vatReturn) => vatReturn.period
+      render: (value, vatReturn) => value || 'N/A'
     },
     {
       key: 'dueDate',
       label: 'Due Date',
-      render: (vatReturn) => new Date(vatReturn.dueDate).toLocaleDateString()
+      render: (value, vatReturn) => value ? new Date(value).toLocaleDateString() : 'N/A'
     },
     {
       key: 'totalSales',
       label: 'Total Sales',
-      render: (vatReturn) => `₵${vatReturn.totalSales.toLocaleString()}`
+      render: (value, vatReturn) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'outputVAT',
       label: 'Output VAT',
-      render: (vatReturn) => `₵${vatReturn.outputVAT.toLocaleString()}`
+      render: (value, vatReturn) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'inputVAT',
       label: 'Input VAT',
-      render: (vatReturn) => `₵${vatReturn.inputVAT.toLocaleString()}`
+      render: (value, vatReturn) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'netVAT',
       label: 'Net VAT',
-      render: (vatReturn) => (
-        <span className={vatReturn.netVAT >= 0 ? 'text-red-600' : 'text-green-600'}>
-          ₵{Math.abs(vatReturn.netVAT).toLocaleString()}
-          {vatReturn.netVAT >= 0 ? ' (Payable)' : ' (Refund)'}
-                </span>
-            )
-        },
-        {
+      render: (value, vatReturn) => (
+        <span className={(value ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}>
+          ₵{Math.abs(value ?? 0).toLocaleString()}
+          {(value ?? 0) >= 0 ? ' (Payable)' : ' (Refund)'}
+        </span>
+      )
+    },
+    {
       key: 'status',
       label: 'Status',
-      render: (vatReturn) => getStatusBadge(vatReturn.status)
+      render: (value, vatReturn) => getStatusBadge(value || 'draft')
     }
   ];
 

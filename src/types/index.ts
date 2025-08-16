@@ -271,3 +271,85 @@ export interface Report {
   data: any;
   createdAt: string;
 }
+
+// Financial Reports Types
+export interface TrialBalanceAccount {
+  id: string;
+  account_code: string;
+  account_name: string;
+  account_type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  debit_balance: number;
+  credit_balance: number;
+  opening_balance: number;
+  movements: number;
+}
+
+export interface BalanceSheetData {
+  as_of_date: Date;
+  assets: {
+    accounts: TrialBalanceAccount[];
+    total: number;
+  };
+  liabilities: {
+    accounts: TrialBalanceAccount[];
+    total: number;
+  };
+  equity: {
+    accounts: TrialBalanceAccount[];
+    total: number;
+  };
+  total_liabilities_and_equity: number;
+  is_balanced: boolean;
+}
+
+export interface IncomeStatementData {
+  period_start: Date;
+  period_end: Date;
+  revenues: {
+    accounts: Array<{
+      account_code: string;
+      account_name: string;
+      amount: number;
+    }>;
+    total: number;
+  };
+  expenses: {
+    accounts: Array<{
+      account_code: string;
+      account_name: string;
+      amount: number;
+    }>;
+    total: number;
+  };
+  gross_profit: number;
+  net_income: number;
+}
+
+export interface CashFlowData {
+  period_start: Date;
+  period_end: Date;
+  operating_activities: {
+    items: Array<{
+      description: string;
+      amount: number;
+    }>;
+    total: number;
+  };
+  investing_activities: {
+    items: Array<{
+      description: string;
+      amount: number;
+    }>;
+    total: number;
+  };
+  financing_activities: {
+    items: Array<{
+      description: string;
+      amount: number;
+    }>;
+    total: number;
+  };
+  net_cash_flow: number;
+  beginning_cash: number;
+  ending_cash: number;
+}

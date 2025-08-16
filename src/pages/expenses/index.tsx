@@ -5,6 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import supabase from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -80,6 +84,28 @@ export default function ExpensesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  
+  // Modal state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [currentExpense, setCurrentExpense] = useState<Expense | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  // Form data
+  const [formData, setFormData] = useState({
+    expense_number: '',
+    employee_name: '',
+    employee_id: '',
+    category: 'other' as Expense['category'],
+    description: '',
+    amount: 0,
+    tax_amount: 0,
+    expense_date: new Date().toISOString().split('T')[0],
+    receipt_url: '',
+    notes: '',
+    status: 'pending' as Expense['status']
+  });
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -314,21 +340,134 @@ export default function ExpensesPage() {
     }
   };
 
+  // Reset form
+  const resetForm = () => {
+    setFormData({
+      expense_number: '',
+      employee_name: '',
+      employee_id: '',
+      category: 'other',
+      description: '',
+      amount: 0,
+      tax_amount: 0,
+      expense_date: new Date().toISOString().split('T')[0],
+      receipt_url: '',
+      notes: '',
+      status: 'pending'
+    });
+    setCurrentExpense(null);
+  };
+
+  // Generate expense number
+  const generateExpenseNumber = () => {
+    const count = expenses.length || 0;
+    return `EXP-${String(count + 1).padStart(4, '0')}`;
+  };
+
   const handleAdd = () => {
-    toast.info('Create expense functionality coming soon!');
+    if (!hasPermission('expenses:write')) {
+      toast.error('You do not have permission to create expenses');
+      return;
+    }
+    resetForm();
+    setFormData(prev => ({ ...prev, expense_number: generateExpenseNumber() }));
+    setIsCreateModalOpen(true);
   };
 
   const handleEdit = (expense: Expense) => {
-    toast.info(`Edit expense ${expense.expense_number} - Coming soon!`);
+    if (!hasPermission('expenses:write')) {
+      toast.error('You do not have permission to edit expenses');
+      return;
+    }
+    setCurrentExpense(expense);
+    setFormData({
+      expense_number: expense.expense_number,
+      employee_name: expense.employee_name,
+      employee_id: expense.employee_id,
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+      tax_amount: expense.tax_amount,
+      expense_date: expense.expense_date,
+      receipt_url: expense.receipt_url || '',
+      notes: expense.notes || '',
+      status: expense.status
+    });
+    setIsEditModalOpen(true);
   };
 
   const handleView = (expense: Expense) => {
-    toast.info(`View expense ${expense.expense_number} - Coming soon!`);
+    setCurrentExpense(expense);
+    setIsViewModalOpen(true);
   };
 
-  const handleDelete = (expense: Expense) => {
-    if (confirm(`Are you sure you want to delete expense ${expense.expense_number}?`)) {
-      toast.info('Delete functionality coming soon!');
+  const handleDelete = async (expense: Expense) => {
+    if (!hasPermission('expenses:delete')) {
+      toast.error('You do not have permission to delete expenses');
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete expense ${expense.expense_number}?`)) {
+      try {
+        // Remove from local state (since using mock data)
+        setExpenses(prev => prev.filter(e => e.id !== expense.id));
+            toast.success('Expense deleted successfully');
+      } catch (error) {
+        console.error('Error deleting expense:', error);
+            toast.error('Failed to delete expense');
+      }
+    }
+  };
+
+  // Handle create expense
+  const handleCreateExpense = async () => {
+    try {
+      setModalLoading(true);
+      
+      // Create new expense object
+      const newExpense: Expense = {
+        id: Date.now().toString(),
+        ...formData,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Add to local state (since using mock data)
+      setExpenses(prev => [newExpense, ...prev]);
+      setIsCreateModalOpen(false);
+      resetForm();
+      toast.success('Expense created successfully');
+    } catch (error) {
+      console.error('Error creating expense:', error);
+      toast.error('Failed to create expense');
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  // Handle save edit
+  const handleSaveEdit = async () => {
+    if (!currentExpense) return;
+    
+    try {
+      setModalLoading(true);
+      
+      // Update expense in local state
+      const updatedExpense = {
+        ...currentExpense,
+        ...formData,
+        updated_at: new Date().toISOString()
+      };
+
+      setExpenses(prev => prev.map(e => e.id === currentExpense.id ? updatedExpense : e));
+      setIsEditModalOpen(false);
+      resetForm();
+      toast.success('Expense updated successfully');
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      toast.error('Failed to update expense');
+    } finally {
+      setModalLoading(false);
     }
   };
 
@@ -464,6 +603,356 @@ export default function ExpensesPage() {
         onDelete={handleDelete}
         emptyMessage="No expenses found. Add your first expense to get started."
       />
+
+      {/* Create Expense Modal */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Expense</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="expense_number">Expense Number</Label>
+                <Input
+                  id="expense_number"
+                  value={formData.expense_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, expense_number: e.target.value }))}
+                  placeholder="EXP-0001"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="employee_name">Employee Name *</Label>
+                <Input
+                  id="employee_name"
+                  value={formData.employee_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, employee_name: e.target.value }))}
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value: Expense['category']) => 
+                    setFormData(prev => ({ ...prev, category: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="travel">Travel</SelectItem>
+                    <SelectItem value="meals">Meals</SelectItem>
+                    <SelectItem value="office_supplies">Office Supplies</SelectItem>
+                    <SelectItem value="utilities">Utilities</SelectItem>
+                    <SelectItem value="rent">Rent</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="professional_services">Professional Services</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="expense_date">Expense Date</Label>
+                <Input
+                  id="expense_date"
+                  type="date"
+                  value={formData.expense_date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, expense_date: e.target.value }))}
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="description">Description *</Label>
+              <Input
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Expense description"
+                required
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="amount">Amount (GHS)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.amount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                  placeholder="100.00"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="tax_amount">Tax Amount (GHS)</Label>
+                <Input
+                  id="tax_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.tax_amount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, tax_amount: parseFloat(e.target.value) || 0 }))}
+                  placeholder="12.50"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="receipt_url">Receipt URL</Label>
+              <Input
+                id="receipt_url"
+                value={formData.receipt_url}
+                onChange={(e) => setFormData(prev => ({ ...prev, receipt_url: e.target.value }))}
+                placeholder="https://example.com/receipt.pdf"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Additional notes"
+                rows={3}
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateModalOpen(false)} disabled={modalLoading}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateExpense} 
+              disabled={modalLoading || !formData.employee_name || !formData.description}
+            >
+              {modalLoading ? 'Creating...' : 'Create Expense'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Expense Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Expense</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_expense_number">Expense Number</Label>
+                <Input
+                  id="edit_expense_number"
+                  value={formData.expense_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, expense_number: e.target.value }))}
+                  placeholder="EXP-0001"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="edit_employee_name">Employee Name *</Label>
+                <Input
+                  id="edit_employee_name"
+                  value={formData.employee_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, employee_name: e.target.value }))}
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_category">Category</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value: Expense['category']) => 
+                    setFormData(prev => ({ ...prev, category: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="travel">Travel</SelectItem>
+                    <SelectItem value="meals">Meals</SelectItem>
+                    <SelectItem value="office_supplies">Office Supplies</SelectItem>
+                    <SelectItem value="utilities">Utilities</SelectItem>
+                    <SelectItem value="rent">Rent</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="professional_services">Professional Services</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="edit_status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value: Expense['status']) => 
+                    setFormData(prev => ({ ...prev, status: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="edit_description">Description *</Label>
+              <Input
+                id="edit_description"
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Expense description"
+                required
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_amount">Amount (GHS)</Label>
+                <Input
+                  id="edit_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.amount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                  placeholder="100.00"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="edit_tax_amount">Tax Amount (GHS)</Label>
+                <Input
+                  id="edit_tax_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.tax_amount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, tax_amount: parseFloat(e.target.value) || 0 }))}
+                  placeholder="12.50"
+                />
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={modalLoading}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveEdit} 
+              disabled={modalLoading || !formData.employee_name || !formData.description}
+            >
+              {modalLoading ? 'Updating...' : 'Update Expense'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Expense Modal */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Expense Details</DialogTitle>
+          </DialogHeader>
+          
+          {currentExpense && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">{currentExpense.expense_number}</h3>
+                  <p className="text-muted-foreground">{currentExpense.description}</p>
+                </div>
+                <StatusBadge status={currentExpense.status} />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Employee</Label>
+                  <p className="font-medium">{currentExpense.employee_name}</p>
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <p className="capitalize">{currentExpense.category.replace('_', ' ')}</p>
+                </div>
+                <div>
+                  <Label>Amount</Label>
+                  <p>₵{currentExpense.amount.toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label>Tax Amount</Label>
+                  <p>₵{currentExpense.tax_amount.toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label>Expense Date</Label>
+                  <p>{new Date(currentExpense.expense_date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <StatusBadge status={currentExpense.status} />
+                </div>
+              </div>
+              
+              {currentExpense.receipt_url && (
+                <div>
+                  <Label>Receipt</Label>
+                  <a href={currentExpense.receipt_url} target="_blank" rel="noopener noreferrer" 
+                     className="text-blue-600 hover:underline">
+                    View Receipt
+                  </a>
+                </div>
+              )}
+              
+              {currentExpense.notes && (
+                <div>
+                  <Label>Notes</Label>
+                  <p>{currentExpense.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              setIsViewModalOpen(false);
+              handleEdit(currentExpense!);
+            }}>
+              Edit Expense
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageTemplate>
     );
 } 

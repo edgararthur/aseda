@@ -36,9 +36,9 @@ export function SignupForm() {
       // Personal Info
       email: '',
       password: '',
-      confirmPassword: '',
+    confirmPassword: '',
       fullName: '',
-      role: 'accountant',
+    role: 'accountant',
       
       // Organization Info
       organizationName: '',
@@ -48,7 +48,7 @@ export function SignupForm() {
       address: '',
       
       // Agreements
-      agreeToTerms: false,
+    agreeToTerms: false,
       agreeToPrivacy: false,
   });
 
@@ -259,96 +259,96 @@ export function SignupForm() {
             </div>
             <CardTitle className="text-2xl font-bold text-center">
               {step === 1 ? 'Create your account' : 'Setup your organization'}
-            </CardTitle>
-            <CardDescription className="text-center">
+          </CardTitle>
+          <CardDescription className="text-center">
               {step === 1 
                 ? 'Get started with your personal information' 
                 : 'Tell us about your business'
               }
-            </CardDescription>
+          </CardDescription>
             
             {/* Progress indicator */}
             <div className="flex items-center justify-center space-x-2 pt-4">
               <div className={`h-2 w-8 rounded-full ${step >= 1 ? 'bg-green-600' : 'bg-gray-200'}`} />
               <div className={`h-2 w-8 rounded-full ${step >= 2 ? 'bg-green-600' : 'bg-gray-200'}`} />
             </div>
-          </CardHeader>
+        </CardHeader>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
+              </Alert>
+            )}
+            
               {step === 1 && (
                 <>
                   {/* Google Sign In */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleGoogleSignup}
-                    disabled={isLoading}
-                  >
-                    <Icons.google className="mr-2 h-4 w-4" />
-                    Continue with Google
-                  </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleSignup}
+              disabled={isLoading}
+            >
+              <Icons.google className="mr-2 h-4 w-4" />
+              Continue with Google
+            </Button>
 
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <Separator className="w-full" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
                       <span className="bg-white px-2 text-muted-foreground">
                         Or continue with email
-                      </span>
-                    </div>
-                  </div>
+                </span>
+              </div>
+            </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="fullName">Full Name</Label>
-                    <Input
-                      id="fullName"
-                      name="fullName"
-                      type="text"
-                      placeholder="John Doe"
-                      required
-                      value={formData.fullName}
-                      onChange={handleChange}
-                      disabled={isLoading}
-                    />
-                  </div>
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
+                id="fullName"
+                name="fullName"
+                type="text"
+                placeholder="John Doe"
+                required
+                value={formData.fullName}
+                onChange={handleChange}
+                disabled={isLoading}
+              />
+            </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
                       placeholder="name@company.com"
-                      autoComplete="email"
-                      required
-                      value={formData.email}
-                      onChange={handleChange}
-                      disabled={isLoading}
-                    />
-                  </div>
+                autoComplete="email"
+                required
+                value={formData.email}
+                onChange={handleChange}
+                disabled={isLoading}
+              />
+            </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
                     <div className="relative">
-                      <Input
-                        id="password"
-                        name="password"
+              <Input
+                id="password"
+                name="password"
                         type={showPassword ? "text" : "password"}
-                        autoComplete="new-password"
-                        required
-                        value={formData.password}
-                        onChange={handleChange}
-                        disabled={isLoading}
-                      />
+                autoComplete="new-password"
+                required
+                value={formData.password}
+                onChange={handleChange}
+                disabled={isLoading}
+              />
                       <Button
                         type="button"
                         variant="ghost"
@@ -364,60 +364,60 @@ export function SignupForm() {
                         )}
                       </Button>
                     </div>
-                    
-                    {/* Password strength indicator */}
+              
+              {/* Password strength indicator */}
                     {formData.password && (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <div
-                              key={i}
-                              className={`h-2 w-full rounded ${
-                                i < passwordStrength.score
-                                  ? passwordStrength.score >= 4
-                                    ? 'bg-green-500'
-                                    : passwordStrength.score >= 3
-                                    ? 'bg-yellow-500'
-                                    : 'bg-red-500'
-                                  : 'bg-gray-200'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                        <ul className="space-y-1 text-xs text-gray-500">
-                          <li className={passwordStrength.hasMinLength ? 'text-green-500' : ''}>
-                            ✓ At least {PASSWORD_RULES.minLength} characters
-                          </li>
-                          <li className={passwordStrength.hasUpperCase ? 'text-green-500' : ''}>
-                            ✓ At least one uppercase letter
-                          </li>
-                          <li className={passwordStrength.hasLowerCase ? 'text-green-500' : ''}>
-                            ✓ At least one lowercase letter
-                          </li>
-                          <li className={passwordStrength.hasNumber ? 'text-green-500' : ''}>
-                            ✓ At least one number
-                          </li>
-                          <li className={passwordStrength.hasSpecialChar ? 'text-green-500' : ''}>
-                            ✓ At least one special character
-                          </li>
-                        </ul>
-                      </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <div
+                      key={i}
+                      className={`h-2 w-full rounded ${
+                        i < passwordStrength.score
+                          ? passwordStrength.score >= 4
+                            ? 'bg-green-500'
+                            : passwordStrength.score >= 3
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                          : 'bg-gray-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <ul className="space-y-1 text-xs text-gray-500">
+                  <li className={passwordStrength.hasMinLength ? 'text-green-500' : ''}>
+                    ✓ At least {PASSWORD_RULES.minLength} characters
+                  </li>
+                  <li className={passwordStrength.hasUpperCase ? 'text-green-500' : ''}>
+                    ✓ At least one uppercase letter
+                  </li>
+                  <li className={passwordStrength.hasLowerCase ? 'text-green-500' : ''}>
+                    ✓ At least one lowercase letter
+                  </li>
+                  <li className={passwordStrength.hasNumber ? 'text-green-500' : ''}>
+                    ✓ At least one number
+                  </li>
+                  <li className={passwordStrength.hasSpecialChar ? 'text-green-500' : ''}>
+                    ✓ At least one special character
+                  </li>
+                </ul>
+              </div>
                     )}
-                  </div>
+            </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
                     <div className="relative">
-                      <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
                         type={showConfirmPassword ? "text" : "password"}
-                        autoComplete="new-password"
-                        required
-                        value={formData.confirmPassword}
-                        onChange={handleChange}
-                        disabled={isLoading}
-                      />
+                autoComplete="new-password"
+                required
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                disabled={isLoading}
+              />
                       <Button
                         type="button"
                         variant="ghost"
@@ -433,22 +433,22 @@ export function SignupForm() {
                         )}
                       </Button>
                     </div>
-                  </div>
+            </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
-                    <Select
-                      value={formData.role}
-                      onValueChange={handleRoleChange}
-                      disabled={isLoading}
-                    >
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <Select
+                value={formData.role}
+                onValueChange={handleRoleChange}
+                disabled={isLoading}
+              >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
-                      </SelectTrigger>
-                      <SelectContent>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="accountant">Accountant</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="accountant">Accountant</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -485,9 +485,9 @@ export function SignupForm() {
                         <SelectItem value="company">Company</SelectItem>
                         <SelectItem value="sole_proprietorship">Sole Proprietorship</SelectItem>
                         <SelectItem value="partnership">Partnership</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                </SelectContent>
+              </Select>
+            </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="taxNumber">Tax Number (Optional)</Label>
@@ -529,18 +529,18 @@ export function SignupForm() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="terms"
-                        checked={formData.agreeToTerms}
-                        onCheckedChange={(checked: boolean) => 
-                          setFormData({ ...formData, agreeToTerms: checked })
-                        }
-                      />
-                      <label
-                        htmlFor="terms"
-                        className="text-sm text-muted-foreground"
-                      >
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="terms"
+                checked={formData.agreeToTerms}
+                onCheckedChange={(checked: boolean) => 
+                  setFormData({ ...formData, agreeToTerms: checked })
+                }
+              />
+              <label
+                htmlFor="terms"
+                className="text-sm text-muted-foreground"
+              >
                         I agree to the Terms of Service
                       </label>
                     </div>
@@ -566,7 +566,7 @@ export function SignupForm() {
 
               <div className="flex gap-3">
                 {step > 1 && (
-                  <Button
+                <Button
                     type="button"
                     variant="outline"
                     onClick={handleBack}
@@ -576,35 +576,35 @@ export function SignupForm() {
                     Back
                   </Button>
                 )}
-                <Button
-                  type="submit"
+            <Button
+              type="submit"
                   className="flex-1 bg-green-600 hover:bg-green-700"
-                  disabled={isLoading}
-                >
-                  {isLoading && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+              disabled={isLoading}
+            >
+              {isLoading && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
                   {step === 1 ? 'Continue' : 'Create Account'}
-                </Button>
+              </Button>
               </div>
             </form>
           </CardContent>
           
           <CardFooter>
             <div className="text-center text-sm w-full">
-              Already have an account?{' '}
+            Already have an account?{' '}
               <Link
                 to="/login"
                 className="font-medium text-green-600 hover:text-green-500"
-              >
-                Sign in
+            >
+              Sign in
               </Link>
-            </div>
+          </div>
           </CardFooter>
-        </Card>
+      </Card>
       </div>
     </div>
   );
-}
+} 
 
 export default SignupForm;

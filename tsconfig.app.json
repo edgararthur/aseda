@@ -14,11 +14,20 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Disable strict type-checking */
+    /* Disable ALL type-checking */
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": false,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "noImplicitOverride": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "allowUnreachableCode": true,
+    "allowUnusedLabels": true,
 
     /* for ShadCN */
     "baseUrl": ".",

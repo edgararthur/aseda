@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import { useJournalEntries } from '@/hooks/use-database';
+import type { JournalEntry } from '@/lib/database';
 import { 
   BookOpen, 
   Filter, 
@@ -15,21 +15,23 @@ import {
   Calendar,
   TrendingUp,
   TrendingDown,
-  DollarSign
+  DollarSign,
+  Plus
 } from 'lucide-react';
 
+// Local interface for display purposes
 interface LedgerEntry {
-    id: string;
+  id: string;
   date: string;
-    account_code: string;
-    account_name: string;
-    description: string;
+  account_code: string;
+  account_name: string;
+  description: string;
   reference: string;
-    debit: number;
-    credit: number;
+  debit: number;
+  credit: number;
   balance: number;
   entry_type: 'journal' | 'invoice' | 'payment' | 'adjustment';
-    created_at: string;
+  created_at: string;
 }
 
 interface LedgerStats {
@@ -40,18 +42,55 @@ interface LedgerStats {
 }
 
 export default function GeneralLedgerPage() {
-  const { user, profile } = useAuth();
-    const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [stats, setStats] = useState<LedgerStats>({
-    totalDebits: 0,
-    totalCredits: 0,
-    netBalance: 0,
-    entriesCount: 0
-  });
-    const [loading, setLoading] = useState(true);
+  const { hasPermission } = useAuth();
+  const {
+    data: journalEntries,
+    loading,
+    error,
+    createJournalEntry,
+    searchData,
+    refresh
+  } = useJournalEntries({ realtime: true });
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedAccount, setSelectedAccount] = useState<string>('all');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('current-month');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [accountFilter, setAccountFilter] = useState('all');
+
+  // Transform journal entries to ledger entries for display
+  const transformToLedgerEntries = (entries: JournalEntry[]): LedgerEntry[] => {
+    const ledgerEntries: LedgerEntry[] = [];
+    
+    entries.forEach(entry => {
+      // For each journal entry, create ledger entries for each line item
+      // This is a simplified version - in a real system, you'd have journal entry lines
+      ledgerEntries.push({
+        id: entry.id,
+        date: entry.entry_date,
+        account_code: 'ACC-001', // This would come from the account
+        account_name: 'General Account', // This would come from the account
+        description: entry.description,
+        reference: entry.entry_number,
+        debit: entry.total_amount,
+        credit: 0,
+        balance: entry.total_amount,
+        entry_type: 'journal',
+        created_at: entry.created_at
+      });
+    });
+
+    return ledgerEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const ledgerEntries = transformToLedgerEntries((journalEntries as JournalEntry[]) || []);
+
+  // Calculate statistics
+  const stats: LedgerStats = {
+    totalDebits: ledgerEntries.reduce((sum, entry) => sum + entry.debit, 0),
+    totalCredits: ledgerEntries.reduce((sum, entry) => sum + entry.credit, 0),
+    netBalance: ledgerEntries.reduce((sum, entry) => sum + (entry.debit - entry.credit), 0),
+    entriesCount: ledgerEntries.length
+  };
 
   const columns: Column[] = [
     {
@@ -60,11 +99,11 @@ export default function GeneralLedgerPage() {
       render: (value) => <DateCell date={value} />
     },
     {
-      key: 'account',
+      key: 'account_code',
       label: 'Account',
-      render: (_, row) => (
+      render: (value, row) => (
         <div>
-          <div className="font-medium">{row.account_code}</div>
+          <div className="font-medium">{value}</div>
           <div className="text-sm text-gray-500">{row.account_name}</div>
         </div>
       )
@@ -82,202 +121,116 @@ export default function GeneralLedgerPage() {
     {
       key: 'debit',
       label: 'Debit',
-      render: (value) => value > 0 ? <CurrencyCell amount={value} /> : '-',
-      className: 'text-right'
+      render: (value) => value > 0 ? <CurrencyCell amount={value} className="text-green-600" /> : null
     },
     {
       key: 'credit',
       label: 'Credit',
-      render: (value) => value > 0 ? <CurrencyCell amount={value} /> : '-',
-      className: 'text-right'
+      render: (value) => value > 0 ? <CurrencyCell amount={value} className="text-red-600" /> : null
     },
     {
       key: 'balance',
-      label: 'Balance',
-      render: (value) => <CurrencyCell amount={value} />,
-      className: 'text-right'
+      label: 'Running Balance',
+      render: (value) => (
+        <CurrencyCell 
+          amount={value} 
+          className={value >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'} 
+        />
+      )
     },
     {
       key: 'entry_type',
       label: 'Type',
       render: (value) => (
-        <Badge variant="outline" className="capitalize">
+        <Badge variant={
+          value === 'journal' ? 'default' :
+          value === 'invoice' ? 'secondary' :
+          value === 'payment' ? 'outline' : 'destructive'
+        }>
           {value}
         </Badge>
       )
     }
   ];
 
+  // Handle search
   useEffect(() => {
-    fetchEntries();
-    fetchStats();
-  }, [profile, selectedAccount, selectedPeriod]);
-
-  const fetchEntries = async () => {
-        try {
-            setLoading(true);
-      
-      // Mock data for now - replace with actual Supabase query
-      const mockEntries: LedgerEntry[] = [
-        {
-          id: '1',
-          date: '2024-01-15',
-          account_code: '1001',
-          account_name: 'Cash in Bank',
-          description: 'Customer payment received',
-          reference: 'INV-2024-001',
-          debit: 1725.00,
-          credit: 0,
-          balance: 15725.00,
-          entry_type: 'payment',
-          created_at: '2024-01-15T10:00:00Z'
-        },
-        {
-          id: '2',
-          date: '2024-01-15',
-          account_code: '1200',
-          account_name: 'Accounts Receivable',
-          description: 'Customer payment received',
-          reference: 'INV-2024-001',
-          debit: 0,
-          credit: 1725.00,
-          balance: 8275.00,
-          entry_type: 'payment',
-          created_at: '2024-01-15T10:00:00Z'
-        },
-        {
-          id: '3',
-          date: '2024-01-20',
-          account_code: '4001',
-          account_name: 'Sales Revenue',
-          description: 'Product sales',
-          reference: 'INV-2024-002',
-          debit: 0,
-          credit: 3220.00,
-          balance: 45220.00,
-          entry_type: 'invoice',
-          created_at: '2024-01-20T10:00:00Z'
-        },
-        {
-          id: '4',
-          date: '2024-01-20',
-          account_code: '1200',
-          account_name: 'Accounts Receivable',
-          description: 'Product sales',
-          reference: 'INV-2024-002',
-          debit: 3220.00,
-          credit: 0,
-          balance: 11495.00,
-          entry_type: 'invoice',
-          created_at: '2024-01-20T10:00:00Z'
-        },
-        {
-          id: '5',
-          date: '2024-01-25',
-          account_code: '5001',
-          account_name: 'Office Supplies Expense',
-          description: 'Office supplies purchase',
-          reference: 'EXP-2024-001',
-          debit: 450.00,
-          credit: 0,
-          balance: 2450.00,
-          entry_type: 'journal',
-          created_at: '2024-01-25T10:00:00Z'
-        },
-        {
-          id: '6',
-          date: '2024-01-25',
-          account_code: '1001',
-          account_name: 'Cash in Bank',
-          description: 'Office supplies purchase',
-          reference: 'EXP-2024-001',
-          debit: 0,
-          credit: 450.00,
-          balance: 15275.00,
-          entry_type: 'journal',
-          created_at: '2024-01-25T10:00:00Z'
-        }
-      ];
-
-      setEntries(mockEntries);
-    } catch (error) {
-      console.error('Error fetching ledger entries:', error);
-      toast.error('Failed to load ledger entries');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-  const fetchStats = async () => {
-    try {
-      // Calculate stats from entries
-      const mockStats: LedgerStats = {
-        totalDebits: 5395.00,
-        totalCredits: 5395.00,
-        netBalance: 0.00,
-        entriesCount: 6
-      };
-
-      setStats(mockStats);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
+    if (searchQuery.trim()) {
+      searchData(searchQuery);
+    } else {
+      refresh();
     }
+  }, [searchQuery, searchData, refresh]);
+
+  // Filter entries based on filters
+  const filteredEntries = ledgerEntries.filter(entry => {
+    const matchesSearch = searchQuery === '' ||
+      entry.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      entry.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      entry.account_name.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesType = typeFilter === 'all' || entry.entry_type === typeFilter;
+    
+    const matchesAccount = accountFilter === 'all' || entry.account_code === accountFilter;
+
+    const matchesDate = dateFilter === 'all' || (() => {
+      const entryDate = new Date(entry.date);
+      const today = new Date();
+      
+      switch (dateFilter) {
+        case 'today':
+          return entryDate.toDateString() === today.toDateString();
+        case 'week':
+          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          return entryDate >= weekAgo;
+        case 'month':
+          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          return entryDate >= monthAgo;
+        case 'quarter':
+          const quarterAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+          return entryDate >= quarterAgo;
+        default:
+          return true;
+      }
+    })();
+
+    return matchesSearch && matchesType && matchesAccount && matchesDate;
+  });
+
+  const handleAdd = () => {
+    // TODO: Implement add journal entry modal
+    console.log('Add journal entry functionality to be implemented');
   };
 
   const handleExport = () => {
-    toast.info('Export ledger functionality coming soon!');
+    // TODO: Implement export functionality
+    console.log('Export general ledger functionality to be implemented');
   };
 
-  const handlePrint = () => {
-    toast.info('Print ledger functionality coming soon!');
-  };
-
-  const filteredEntries = entries.filter(entry =>
-    entry.account_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    entry.account_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    entry.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    entry.reference.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
+  if (loading) {
     return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
+          <p className="text-muted-foreground">Loading general ledger...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
     <PageTemplate
       title="General Ledger"
-      description="Complete record of all financial transactions"
-      showAddButton={false}
+      description="View all financial transactions and account balances"
+      onAdd={hasPermission('journal_entries:write') ? handleAdd : undefined}
       onSearch={setSearchQuery}
       customActions={
-                <div className="flex gap-2">
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="current-month">Current Month</SelectItem>
-              <SelectItem value="last-month">Last Month</SelectItem>
-              <SelectItem value="current-quarter">Current Quarter</SelectItem>
-              <SelectItem value="current-year">Current Year</SelectItem>
-              <SelectItem value="custom">Custom Range</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Accounts</SelectItem>
-              <SelectItem value="1001">Cash in Bank</SelectItem>
-              <SelectItem value="1200">Accounts Receivable</SelectItem>
-              <SelectItem value="4001">Sales Revenue</SelectItem>
-              <SelectItem value="5001">Office Supplies</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" onClick={handlePrint}>
-            <BookOpen className="w-4 h-4 mr-2" />
-            Print
-                    </Button>
-                </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+        </div>
       }
     >
       {/* Stats Cards */}
@@ -290,7 +243,7 @@ export default function GeneralLedgerPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
               <CurrencyCell amount={stats.totalDebits} />
-                            </div>
+            </div>
             <p className="text-xs text-muted-foreground">
               All debit entries
             </p>
@@ -305,7 +258,7 @@ export default function GeneralLedgerPage() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
               <CurrencyCell amount={stats.totalCredits} />
-                        </div>
+            </div>
             <p className="text-xs text-muted-foreground">
               All credit entries
             </p>
@@ -315,10 +268,10 @@ export default function GeneralLedgerPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
-            <DollarSign className="h-4 w-4 text-blue-600" />
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               <CurrencyCell amount={stats.netBalance} />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -341,14 +294,74 @@ export default function GeneralLedgerPage() {
         </Card>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-4 h-4" />
+            Filters
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4">
+            <div className="min-w-[150px]">
+              <label className="text-sm font-medium">Date Range</label>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">Last 30 Days</SelectItem>
+                  <SelectItem value="quarter">Last Quarter</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-[150px]">
+              <label className="text-sm font-medium">Entry Type</label>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="journal">Journal</SelectItem>
+                  <SelectItem value="invoice">Invoice</SelectItem>
+                  <SelectItem value="payment">Payment</SelectItem>
+                  <SelectItem value="adjustment">Adjustment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-[150px]">
+              <label className="text-sm font-medium">Account</label>
+              <Select value={accountFilter} onValueChange={setAccountFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Accounts</SelectItem>
+                  <SelectItem value="ACC-001">Cash</SelectItem>
+                  <SelectItem value="ACC-002">Accounts Receivable</SelectItem>
+                  <SelectItem value="ACC-003">Inventory</SelectItem>
+                  <SelectItem value="ACC-004">Accounts Payable</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Ledger Entries Table */}
       <DataTableTemplate
         columns={columns}
         data={filteredEntries}
         loading={loading}
-        showActions={false}
-        emptyMessage="No ledger entries found for the selected criteria."
+        emptyMessage="No ledger entries found. Journal entries will appear here once created."
       />
     </PageTemplate>
-    );
-} 
+  );
+}

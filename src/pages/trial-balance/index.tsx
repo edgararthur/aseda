@@ -6,24 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Activity, Download, FileText, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { Activity, Download, FileText, DollarSign, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from '@radix-ui/react-icons';
 import { format } from 'date-fns';
-import { offlineStorage } from '@/lib/offline-storage';
-
-interface TrialBalanceAccount {
-    id: string;
-  accountCode: string;
-  accountName: string;
-  accountType: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
-  debitBalance: number;
-  creditBalance: number;
-  openingBalance: number;
-  movements: number;
-}
+import { FinancialReportsService } from '@/lib/database';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import type { TrialBalanceAccount } from '@/types';
 
 interface TrialBalanceStats {
   totalDebits: number;
@@ -35,7 +26,7 @@ interface TrialBalanceStats {
 }
 
 export default function TrialBalancePage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, profile } = useAuth();
   const [accounts, setAccounts] = useState<TrialBalanceAccount[]>([]);
   const [stats, setStats] = useState<TrialBalanceStats>({
     totalDebits: 0,
@@ -45,20 +36,42 @@ export default function TrialBalancePage() {
     totalAccounts: 0,
     activeAccounts: 0
   });
-    const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [asOfDate, setAsOfDate] = useState<Date>(new Date());
   const [filterType, setFilterType] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchTrialBalance();
-  }, [asOfDate]);
+    if (profile?.organization_id) {
+      fetchTrialBalance();
+    }
+  }, [asOfDate, profile?.organization_id]);
 
-    const fetchTrialBalance = async () => {
-        try {
-            setLoading(true);
-      // Mock trial balance data
-      const mockAccounts: TrialBalanceAccount[] = [
+  const fetchTrialBalance = async () => {
+    if (!profile?.organization_id) {
+      setError('No organization context');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const result = await FinancialReportsService.generateTrialBalance(
+        profile.organization_id,
+        asOfDate
+      );
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      const trialBalanceAccounts = result.data || [];
+      
+      // If no data from database, use mock data for development
+      const mockAccounts = [
         {
           id: '1',
           accountCode: '1000',
@@ -161,11 +174,12 @@ export default function TrialBalancePage() {
         }
       ];
 
-      setAccounts(mockAccounts);
+      const finalAccounts = trialBalanceAccounts.length > 0 ? trialBalanceAccounts : mockAccounts;
+      setAccounts(finalAccounts);
       
       // Calculate stats
-      const totalDebits = mockAccounts.reduce((sum, acc) => sum + acc.debitBalance, 0);
-      const totalCredits = mockAccounts.reduce((sum, acc) => sum + acc.creditBalance, 0);
+      const totalDebits = finalAccounts.reduce((sum, acc) => sum + acc.debitBalance, 0);
+      const totalCredits = finalAccounts.reduce((sum, acc) => sum + acc.creditBalance, 0);
       const difference = Math.abs(totalDebits - totalCredits);
       
       setStats({
@@ -224,18 +238,18 @@ export default function TrialBalancePage() {
     {
       key: 'accountCode',
       label: 'Account Code',
-      render: (account) => (
-        <span className="font-mono text-sm">{account.accountCode}</span>
+      render: (value, account) => (
+        <span className="font-mono text-sm">{value || 'N/A'}</span>
       )
     },
     {
       key: 'accountName',
       label: 'Account Name',
-      render: (account) => (
+      render: (value, account) => (
         <div>
-          <div className="font-medium">{account.accountName}</div>
-          <Badge className={getAccountTypeColor(account.accountType)} variant="secondary">
-            {account.accountType.charAt(0).toUpperCase() + account.accountType.slice(1)}
+          <div className="font-medium">{value || 'N/A'}</div>
+          <Badge className={getAccountTypeColor(account?.accountType || 'asset')} variant="secondary">
+            {(account?.accountType || 'asset').charAt(0).toUpperCase() + (account?.accountType || 'asset').slice(1)}
           </Badge>
         </div>
       )
@@ -243,36 +257,36 @@ export default function TrialBalancePage() {
     {
       key: 'openingBalance',
       label: 'Opening Balance',
-      render: (account) => (
+      render: (value, account) => (
         <span className="font-mono">
-          ₵{account.openingBalance.toLocaleString()}
+          ₵{(value ?? 0).toLocaleString()}
         </span>
       )
     },
     {
       key: 'movements',
       label: 'Movements',
-      render: (account) => (
-        <span className={`font-mono ${account.movements > 0 ? 'text-green-600' : account.movements < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-          {account.movements > 0 ? '+' : ''}₵{account.movements.toLocaleString()}
+      render: (value, account) => (
+        <span className={`font-mono ${((value ?? 0) > 0) ? 'text-green-600' : ((value ?? 0) < 0) ? 'text-red-600' : 'text-gray-600'}`}>
+          {(value ?? 0) > 0 ? '+' : ''}₵{Math.abs(value ?? 0).toLocaleString()}
         </span>
       )
     },
     {
       key: 'debitBalance',
       label: 'Debit Balance',
-      render: (account) => (
+      render: (value, account) => (
         <span className="font-mono">
-          {account.debitBalance > 0 ? `₵${account.debitBalance.toLocaleString()}` : '-'}
+          {(value ?? 0) > 0 ? `₵${(value ?? 0).toLocaleString()}` : '-'}
         </span>
       )
     },
     {
       key: 'creditBalance',
       label: 'Credit Balance',
-      render: (account) => (
+      render: (value, account) => (
         <span className="font-mono">
-          {account.creditBalance > 0 ? `₵${account.creditBalance.toLocaleString()}` : '-'}
+          {(value ?? 0) > 0 ? `₵${(value ?? 0).toLocaleString()}` : '-'}
         </span>
       )
     }

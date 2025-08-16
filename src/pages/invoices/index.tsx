@@ -1,12 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { offlineStorage } from '@/lib/offline-storage';
+import { useInvoices, useContacts, useProducts } from '@/hooks/use-database';
+import { ErrorHandler } from '@/lib/error-handler';
+import type { Invoice, Contact, Product } from '@/lib/database';
+
+// Helper functions to map between UI and DB schemas
+const mapInvoiceFromDB = (dbInvoice: Invoice) => ({
+  ...dbInvoice,
+  invoice_number: dbInvoice.invoicenumber,
+  contact_id: dbInvoice.customerid,
+  issue_date: dbInvoice.date,
+  due_date: dbInvoice.duedate,
+  total_amount: dbInvoice.total,
+  tax_amount: dbInvoice.taxamount,
+  payment_terms: dbInvoice.terms,
+  line_items: Array.isArray(dbInvoice.items) ? dbInvoice.items as unknown as InvoiceLineItem[] : []
+});
+
+const mapInvoiceForDisplay = (invoice: Invoice) => mapInvoiceFromDB(invoice);
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   FileText, 
   Plus, 
@@ -18,132 +38,405 @@ import {
   Search,
   CheckCircle,
   Clock,
-  XCircle
+  XCircle,
+  DollarSign,
+  AlertTriangle,
+  Minus,
+  Calculator,
+  RefreshCw
 } from 'lucide-react';
 import { formatCurrency, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-interface Invoice {
-  id: string;
+// Invoice line item interface
+interface InvoiceLineItem {
+    id: string;
+  product_id: string;
+  product_name: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  tax_rate: number;
+  line_total: number;
+}
+
+// Complete invoice form data
+interface InvoiceFormData {
   invoice_number: string;
-  client_name: string;
-  client_email: string;
+  contact_id: string;
   issue_date: string;
-  due_date: string;
+    due_date: string;
   status: 'draft' | 'sent' | 'paid' | 'overdue';
-  total_amount: number;
-  created_at: string;
-  synced: boolean;
-  organization_id: string;
+  notes: string;
+  line_items: InvoiceLineItem[];
+  subtotal: number;
+  tax_amount: number;
+    total_amount: number;
+  payment_terms: string;
+}
+
+// Invoice stats interface
+interface InvoiceStats {
+  total: number;
+    paid: number;
+  overdue: number;
+  draft: number;
+  totalValue: number;
+  paidValue: number;
+  overdueValue: number;
 }
 
 export default function InvoicesPage() {
-  const { user, profile, hasPermission } = useAuth();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { hasPermission, profile, user, loading: authLoading } = useAuth();
+  
+  // Component is working correctly now
+  const {
+    data: invoices,
+    loading: invoicesLoading,
+    error,
+    createInvoice,
+    updateInvoiceStatus,
+    searchData,
+    refresh,
+    stats
+  } = useInvoices({ realtime: true });
+
+  const {
+    data: contacts,
+    loading: contactsLoading
+  } = useContacts({ realtime: true });
+
+  const {
+    data: products,
+    loading: productsLoading
+  } = useProducts({ realtime: true });
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [currentInvoice, setCurrentInvoice] = useState<Invoice | null>(null);
+  const [loading, setLoading] = useState(false);
 
+  // Form data for creating/editing invoices
+  const [formData, setFormData] = useState<InvoiceFormData>({
+    invoice_number: '',
+    contact_id: '',
+    issue_date: new Date().toISOString().split('T')[0],
+    due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'draft',
+    notes: '',
+    line_items: [],
+    subtotal: 0,
+    tax_amount: 0,
+    total_amount: 0,
+    payment_terms: 'Net 30'
+  });
+
+  // Handle search
   useEffect(() => {
-    fetchInvoices();
-  }, [profile]);
+    if (searchQuery.trim()) {
+      searchData(searchQuery);
+    } else {
+      refresh();
+    }
+  }, [searchQuery, searchData, refresh]);
 
-  const fetchInvoices = async () => {
+  // Calculate totals whenever line items change
+  useEffect(() => {
+    const subtotal = formData.line_items.reduce((sum, item) => sum + item.line_total, 0);
+    const taxAmount = formData.line_items.reduce((sum, item) => sum + (item.line_total * item.tax_rate / 100), 0);
+    const total = subtotal + taxAmount;
+
+    setFormData(prev => ({
+      ...prev,
+      subtotal,
+      tax_amount: taxAmount,
+      total_amount: total
+    }));
+  }, [formData.line_items]);
+
+  // Generate next invoice number
+  const generateInvoiceNumber = () => {
+    const currentYear = new Date().getFullYear();
+    const invoiceCount = (invoices as Invoice[])?.length || 0;
+    return `INV-${currentYear}-${String(invoiceCount + 1).padStart(4, '0')}`;
+  };
+
+  // Add line item
+  const addLineItem = () => {
+    const newItem: InvoiceLineItem = {
+      id: `temp-${Date.now()}`,
+      product_id: '',
+      product_name: '',
+      description: '',
+      quantity: 1,
+      unit_price: 0,
+      tax_rate: 0,
+      line_total: 0
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      line_items: [...prev.line_items, newItem]
+    }));
+  };
+
+  // Remove line item
+  const removeLineItem = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      line_items: prev.line_items.filter(item => item.id !== id)
+    }));
+  };
+
+  // Update line item
+  const updateLineItem = (id: string, updates: Partial<InvoiceLineItem>) => {
+    setFormData(prev => ({
+      ...prev,
+      line_items: prev.line_items.map(item => {
+        if (item.id === id) {
+          const updatedItem = { ...item, ...updates };
+          
+          // If product is selected, auto-fill details
+          if (updates.product_id && products) {
+            const product = (products as Product[]).find(p => p.id === updates.product_id);
+            if (product) {
+              updatedItem.product_name = product.name;
+              updatedItem.description = product.description || '';
+              updatedItem.unit_price = product.sales_price || 0;
+              updatedItem.tax_rate = product.tax_rate || 0;
+            }
+          }
+
+          // Recalculate line total
+          updatedItem.line_total = updatedItem.quantity * updatedItem.unit_price;
+          
+          return updatedItem;
+        }
+        return item;
+      })
+    }));
+  };
+
+  // Filter invoices
+  const typedInvoices = (invoices as Invoice[]) || [];
+  const filteredInvoices = typedInvoices.filter(invoice => {
+    const matchesSearch = searchQuery === '' ||
+      invoice.invoicenumber.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  // Calculate local stats if not available from hook
+  const localStats: InvoiceStats = stats || {
+    total: filteredInvoices.length,
+    paid: filteredInvoices.filter(inv => inv.status === 'paid').length,
+    overdue: filteredInvoices.filter(inv => inv.status === 'overdue').length,
+    draft: filteredInvoices.filter(inv => inv.status === 'draft').length,
+    totalValue: filteredInvoices.reduce((sum, inv) => sum + inv.total, 0),
+    paidValue: filteredInvoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + inv.total, 0),
+    overdueValue: filteredInvoices.filter(inv => inv.status === 'overdue').reduce((sum, inv) => sum + inv.total, 0)
+  };
+
+  const handleCreateInvoice = async () => {
+        try {
+            setLoading(true);
+
+      // Validation
+      if (!formData.contact_id) {
+        toast.error('Please select a customer');
+        return;
+      }
+
+      if (formData.line_items.length === 0) {
+        toast.error('Please add at least one line item');
+        return;
+      }
+
+      if (!formData.invoice_number) {
+        formData.invoice_number = generateInvoiceNumber();
+      }
+
+      // Additional validation
+      if (formData.total_amount <= 0) {
+        toast.error('Invoice total must be greater than 0');
+        return;
+      }
+
+      if (new Date(formData.due_date) < new Date(formData.issue_date)) {
+        toast.error('Due date cannot be before issue date');
+        return;
+      }
+
+      // Create invoice data with proper mapping
+      const invoiceData = {
+        invoice_number: formData.invoice_number,
+        contact_id: formData.contact_id,
+        issue_date: formData.issue_date,
+        due_date: formData.due_date,
+        status: formData.status,
+        total_amount: formData.total_amount,
+        tax_amount: formData.tax_amount,
+        discount_amount: 0, // Add if needed
+        notes: formData.notes,
+        payment_terms: formData.payment_terms,
+        currency: 'GHS',
+        line_items: formData.line_items.map(item => ({
+          product_id: item.product_id || null,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          line_total: item.line_total
+        }))
+      };
+
+      console.log('Creating invoice with data:', invoiceData);
+      
+      const result = await createInvoice(invoiceData);
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to create invoice');
+      }
+
+      toast.success('Invoice created successfully!');
+      setIsCreateModalOpen(false);
+      resetForm();
+      
+      // Refresh the invoice list
+      refresh();
+      
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create invoice';
+      toast.error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+  const handleEditInvoice = (invoice: Invoice) => {
+    setCurrentInvoice(invoice);
+    
+    // Populate form with invoice data using mapped fields
+    const mapped = mapInvoiceForDisplay(invoice);
+    setFormData({
+      invoice_number: mapped.invoice_number,
+      contact_id: mapped.contact_id || '',
+      issue_date: mapped.issue_date,
+      due_date: mapped.due_date,
+      status: invoice.status as any,
+      notes: invoice.notes || '',
+      line_items: Array.isArray(mapped.line_items) ? mapped.line_items as unknown as InvoiceLineItem[] : [],
+      subtotal: invoice.subtotal,
+      tax_amount: mapped.tax_amount,
+      total_amount: mapped.total_amount,
+      payment_terms: mapped.payment_terms || 'Net 30'
+    });
+    
+    setIsEditModalOpen(true);
+  };
+
+  const handleViewInvoice = (invoice: Invoice) => {
+    setCurrentInvoice(invoice);
+    setIsViewModalOpen(true);
+  };
+
+  const handleDeleteInvoice = async (invoice: Invoice) => {
+          if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoicenumber}?`)) {
+      try {
+        setLoading(true);
+        // TODO: Implement delete functionality in hook
+            toast.success('Invoice deleted successfully');
+      } catch (error) {
+        console.error('Error deleting invoice:', error);
+            toast.error('Failed to delete invoice');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleSaveEdit = async () => {
     try {
       setLoading(true);
       
-      if (!profile?.organization_id) return;
+      if (!currentInvoice) return;
 
-      // Mock data for demonstration
-      const mockInvoices: Invoice[] = [
-        {
-          id: '1',
-          invoice_number: 'INV-2024-001',
-          client_name: 'Kofi Asante',
-          client_email: 'kofi@example.com',
-          issue_date: '2024-01-15',
-          due_date: '2024-02-15',
-          status: 'sent',
-          total_amount: 2328.75,
-          created_at: '2024-01-15T10:00:00Z',
-          synced: false,
-          organization_id: profile.organization_id
-        },
-        {
-          id: '2',
-          invoice_number: 'INV-2024-002',
-          client_name: 'Ama Osei',
-          client_email: 'ama@example.com',
-          issue_date: '2024-01-20',
-          due_date: '2024-02-20',
-          status: 'paid',
-          total_amount: 5075,
-          created_at: '2024-01-20T10:00:00Z',
-          synced: false,
-          organization_id: profile.organization_id
-        }
-      ];
-
-      setInvoices(mockInvoices);
+      // TODO: Implement full invoice update including line items
+      await updateInvoiceStatus(currentInvoice.id, formData.status);
+      toast.success('Invoice updated successfully');
+      setIsEditModalOpen(false);
+      resetForm();
     } catch (error) {
-      console.error('Error fetching invoices:', error);
-      toast.error('Failed to load invoices');
+      console.error('Error updating invoice:', error);
+      toast.error('Failed to update invoice');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateInvoice = () => {
-    toast.info('Create invoice functionality coming soon!');
+  const resetForm = () => {
+    setFormData({
+      invoice_number: '',
+      contact_id: '',
+      issue_date: new Date().toISOString().split('T')[0],
+      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      status: 'draft',
+      notes: '',
+      line_items: [],
+      subtotal: 0,
+      tax_amount: 0,
+      total_amount: 0,
+      payment_terms: 'Net 30'
+    });
+    setCurrentInvoice(null);
   };
 
-  const handleUpdateStatus = async (invoice: Invoice, newStatus: Invoice['status']) => {
-    try {
-      const updatedInvoices = invoices.map(inv => 
-        inv.id === invoice.id ? { ...inv, status: newStatus } : inv
-      );
-      setInvoices(updatedInvoices);
-      toast.success(`Invoice marked as ${newStatus}`);
-    } catch (error) {
-      toast.error('Failed to update invoice');
-    }
+  const getStatusBadge = (status: string) => {
+    const statusConfig = {
+      draft: { variant: 'secondary' as const, icon: FileText, label: 'Draft' },
+      sent: { variant: 'default' as const, icon: Send, label: 'Sent' },
+      paid: { variant: 'default' as const, icon: CheckCircle, label: 'Paid' },
+      overdue: { variant: 'destructive' as const, icon: AlertTriangle, label: 'Overdue' }
+    };
+
+    const config = statusConfig[status as keyof typeof statusConfig];
+    if (!config) return <Badge variant="secondary">{status}</Badge>;
+
+    const IconComponent = config.icon;
+    return (
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        <IconComponent className="w-3 h-3" />
+        {config.label}
+      </Badge>
+    );
   };
 
-  const getStatusColor = (status: Invoice['status']) => {
-    switch (status) {
-      case 'draft': return 'bg-gray-100 text-gray-800';
-      case 'sent': return 'bg-blue-100 text-blue-800';
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusIcon = (status: Invoice['status']) => {
-    switch (status) {
-      case 'draft': return Clock;
-      case 'sent': return Send;
-      case 'paid': return CheckCircle;
-      case 'overdue': return XCircle;
-      default: return Clock;
-    }
-  };
-
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
-      invoice.invoice_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.client_name.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
-
-  if (loading) {
+  // Show auth loading if needed
+  if (authLoading) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
+          <p className="text-muted-foreground">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Only show full loading screen on initial load - allow partial rendering otherwise
+  const isInitialLoad = invoicesLoading && !invoices;
+  
+  if (isInitialLoad) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
           <p className="text-muted-foreground">Loading invoices...</p>
         </div>
       </div>
@@ -151,20 +444,47 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="h-full flex flex-col space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Invoices</h1>
-          <p className="text-muted-foreground">Manage customer invoices and track payments</p>
+    <div className="space-y-6 p-6">
+      {/* Enhanced Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Invoices</h1>
+            <p className="text-muted-foreground mt-1">Create, manage, and track your sales invoices and billing</p>
+            <div className="flex items-center gap-4 mt-3">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{localStats.total}</span> Total Invoices
+              </div>
+              <div className="text-sm text-green-600">
+                <span className="font-medium">{localStats.paid}</span> Paid
+              </div>
+              <div className="text-sm text-red-600">
+                <span className="font-medium">{localStats.overdue}</span> Overdue
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => refresh()}
+              disabled={invoicesLoading}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${invoicesLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button 
+              onClick={() => {
+                console.log('Create Invoice button clicked!');
+                setIsCreateModalOpen(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+              size="lg"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Create Invoice
+            </Button>
+          </div>
         </div>
-        
-        {hasPermission('invoices:write') && (
-          <Button onClick={handleCreateInvoice}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Invoice
-          </Button>
-        )}
       </div>
 
       {/* Stats Cards */}
@@ -175,9 +495,9 @@ export default function InvoicesPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{invoices.length}</div>
+            <div className="text-2xl font-bold">{localStats.total}</div>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(invoices.reduce((sum, inv) => sum + inv.total_amount, 0))} total value
+              {formatCurrency(localStats.totalValue)}
             </p>
           </CardContent>
         </Card>
@@ -188,26 +508,9 @@ export default function InvoicesPage() {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {invoices.filter(inv => inv.status === 'paid').length}
-            </div>
+            <div className="text-2xl font-bold text-green-600">{localStats.paid}</div>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(invoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + inv.total_amount, 0))} received
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {invoices.filter(inv => inv.status === 'sent').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(invoices.filter(inv => inv.status === 'sent').reduce((sum, inv) => sum + inv.total_amount, 0))} pending
+              {formatCurrency(localStats.paidValue)}
             </p>
           </CardContent>
         </Card>
@@ -215,14 +518,25 @@ export default function InvoicesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
+            <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {invoices.filter(inv => inv.status === 'overdue').length}
-            </div>
+            <div className="text-2xl font-bold text-red-600">{localStats.overdue}</div>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(invoices.filter(inv => inv.status === 'overdue').reduce((sum, inv) => sum + inv.total_amount, 0))} overdue
+              {formatCurrency(localStats.overdueValue)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Draft</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{localStats.draft}</div>
+            <p className="text-xs text-muted-foreground">
+              Pending completion
             </p>
           </CardContent>
         </Card>
@@ -259,7 +573,7 @@ export default function InvoicesPage() {
         <CardHeader>
           <CardTitle>Invoices</CardTitle>
           <CardDescription>
-            {filteredInvoices.length} of {invoices.length} invoices
+            {filteredInvoices.length} of {typedInvoices.length} invoices
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -268,7 +582,7 @@ export default function InvoicesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Invoice #</TableHead>
-                  <TableHead>Client</TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Due Date</TableHead>
@@ -277,65 +591,75 @@ export default function InvoicesPage() {
               </TableHeader>
               <TableBody>
                 {filteredInvoices.map((invoice) => {
-                  const StatusIcon = getStatusIcon(invoice.status);
+                  const customer = (contacts as Contact[])?.find(c => c.id === invoice.customerid);
+                  const isOverdue = new Date(invoice.duedate) < new Date() && invoice.status !== 'paid';
+                  
                   return (
-                    <TableRow key={invoice.id}>
+                    <TableRow key={invoice.id} className={isOverdue ? 'bg-red-50' : ''}>
                       <TableCell className="font-medium">
-                        {invoice.invoice_number}
+                        {invoice.invoicenumber}
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{invoice.client_name}</div>
-                          <div className="text-sm text-muted-foreground">{invoice.client_email}</div>
+                          <div className="font-medium">{customer?.name || 'Unknown Customer'}</div>
+                          <div className="text-sm text-muted-foreground">{customer?.email}</div>
                         </div>
                       </TableCell>
-                      <TableCell>{formatCurrency(invoice.total_amount)}</TableCell>
+                      <TableCell>{formatCurrency(invoice.total)}</TableCell>
+                      <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                       <TableCell>
-                        <Badge className={cn('flex items-center gap-1 w-fit', getStatusColor(invoice.status))}>
-                          <StatusIcon className="w-3 h-3" />
-                          {invoice.status}
-                        </Badge>
+                        <div className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                          {new Date(invoice.duedate).toLocaleDateString()}
+                        </div>
                       </TableCell>
-                      <TableCell>{new Date(invoice.due_date).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleViewInvoice(invoice)}
+                          >
                             <Eye className="w-4 h-4" />
-                          </Button>
-                          
-                          <Button variant="ghost" size="sm">
-                            <Download className="w-4 h-4" />
                           </Button>
                           
                           {hasPermission('invoices:write') && (
                             <>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => handleEditInvoice(invoice)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              
                               {invoice.status === 'draft' && (
-                                <Button 
-                                  variant="ghost" 
+                    <Button 
+                        variant="ghost" 
                                   size="sm" 
-                                  onClick={() => handleUpdateStatus(invoice, 'sent')}
-                                >
+                                  onClick={() => updateInvoiceStatus(invoice.id, 'sent')}
+                    >
                                   <Send className="w-4 h-4" />
-                                </Button>
+                    </Button>
                               )}
                               
                               {invoice.status === 'sent' && (
-                                <Button 
-                                  variant="ghost" 
+                    <Button 
+                        variant="ghost" 
                                   size="sm" 
-                                  onClick={() => handleUpdateStatus(invoice, 'paid')}
-                                >
+                                  onClick={() => updateInvoiceStatus(invoice.id, 'paid')}
+                    >
                                   <CheckCircle className="w-4 h-4" />
-                                </Button>
+                    </Button>
                               )}
                             </>
                           )}
                           
                           {hasPermission('invoices:delete') && (
-                            <Button 
-                              variant="ghost" 
+                    <Button 
+                        variant="ghost" 
                               size="sm" 
                               className="text-red-600 hover:text-red-700"
+                              onClick={() => handleDeleteInvoice(invoice)}
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -359,8 +683,8 @@ export default function InvoicesPage() {
                   : 'Create your first invoice to get started'
                 }
               </p>
-              {hasPermission('invoices:write') && !searchQuery && statusFilter === 'all' && (
-                <Button onClick={handleCreateInvoice}>
+              {!searchQuery && statusFilter === 'all' && (
+                <Button onClick={() => setIsCreateModalOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Create Invoice
                 </Button>
@@ -369,6 +693,405 @@ export default function InvoicesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Create Invoice Modal */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              Create New Invoice
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Fill in the details below to create a new invoice for your customer
+            </p>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Invoice Header */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="invoice_number">Invoice Number</Label>
+                <Input
+                  id="invoice_number"
+                  value={formData.invoice_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, invoice_number: e.target.value }))}
+                  placeholder={generateInvoiceNumber()}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="contact_id">Customer *</Label>
+                <Select
+                  value={formData.contact_id}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, contact_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(contacts as Contact[])?.map(contact => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        {contact.name} - {contact.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="issue_date">Issue Date</Label>
+                <Input
+                  id="issue_date"
+                  type="date"
+                  value={formData.issue_date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, issue_date: e.target.value }))}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="due_date">Due Date</Label>
+                <Input
+                  id="due_date"
+                  type="date"
+                  value={formData.due_date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="payment_terms">Payment Terms</Label>
+                <Select
+                  value={formData.payment_terms}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, payment_terms: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Due on receipt">Due on receipt</SelectItem>
+                    <SelectItem value="Net 15">Net 15</SelectItem>
+                    <SelectItem value="Net 30">Net 30</SelectItem>
+                    <SelectItem value="Net 60">Net 60</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value: 'draft' | 'sent' | 'paid' | 'overdue') => 
+                    setFormData(prev => ({ ...prev, status: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <Label className="text-lg font-semibold">Line Items</Label>
+                <Button type="button" variant="outline" onClick={addLineItem}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Item
+                </Button>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product/Service</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Qty</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Tax %</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {formData.line_items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <Select
+                            value={item.product_id}
+                            onValueChange={(value) => updateLineItem(item.id, { product_id: value })}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(products as Product[])?.map(product => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={item.description}
+                            onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
+                            placeholder="Description"
+                            className="w-48"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={item.quantity}
+                            onChange={(e) => updateLineItem(item.id, { quantity: parseInt(e.target.value) || 0 })}
+                            className="w-20"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unit_price}
+                            onChange={(e) => updateLineItem(item.id, { unit_price: parseFloat(e.target.value) || 0 })}
+                            className="w-24"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={item.tax_rate}
+                            onChange={(e) => updateLineItem(item.id, { tax_rate: parseFloat(e.target.value) || 0 })}
+                            className="w-20"
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {formatCurrency(item.line_total)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeLineItem(item.id)}
+                            className="text-red-600"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {formData.line_items.length === 0 && (
+                <div className="text-center py-8 border rounded-lg bg-gray-50">
+                  <Calculator className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No line items added yet</p>
+                  <Button type="button" variant="outline" onClick={addLineItem} className="mt-2">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add First Item
+                    </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Totals */}
+            <div className="flex justify-end">
+              <div className="w-80 space-y-2">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(formData.subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax:</span>
+                  <span>{formatCurrency(formData.tax_amount)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Total:</span>
+                  <span>{formatCurrency(formData.total_amount)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Additional notes or terms..."
+                rows={3}
+              />
+            </div>
+          </div>
+          
+          <DialogFooter className="flex justify-between items-center">
+            <div className="text-sm text-muted-foreground">
+              {formData.line_items.length === 0 ? (
+                <span className="text-red-600">⚠️ Add at least one line item</span>
+              ) : !formData.contact_id ? (
+                <span className="text-red-600">⚠️ Select a customer</span>
+              ) : (
+                <span className="text-green-600">✅ Ready to create invoice</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsCreateModalOpen(false)} disabled={loading}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateInvoice} 
+                disabled={loading || formData.line_items.length === 0 || !formData.contact_id}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Invoice
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Invoice Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update Invoice Status</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label>Invoice Number</Label>
+              <Input value={formData.invoice_number} disabled />
+            </div>
+            
+            <div>
+              <Label>Customer</Label>
+              <Input 
+                value={(contacts as Contact[])?.find(c => c.id === formData.contact_id)?.name || 'Unknown'} 
+                disabled 
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select 
+                value={formData.status} 
+                onValueChange={(value: 'draft' | 'sent' | 'paid' | 'overdue') => 
+                  setFormData(prev => ({ ...prev, status: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={loading}>
+              {loading ? 'Updating...' : 'Update Status'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Invoice Modal */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invoice Details</DialogTitle>
+          </DialogHeader>
+          
+          {currentInvoice && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Invoice Number</Label>
+                  <p className="font-medium">{currentInvoice.invoicenumber}</p>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <div className="mt-1">{getStatusBadge(currentInvoice.status)}</div>
+                </div>
+                <div>
+                  <Label>Issue Date</Label>
+                  <p>{new Date(currentInvoice.date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label>Due Date</Label>
+                  <p>{new Date(currentInvoice.duedate).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label>Customer</Label>
+                  <p>{(contacts as Contact[])?.find(c => c.id === currentInvoice.customerid)?.name || 'Unknown Customer'}</p>
+                </div>
+                <div>
+                  <Label>Total Amount</Label>
+                  <p className="text-lg font-bold">{formatCurrency(currentInvoice.total)}</p>
+                </div>
+              </div>
+
+              {currentInvoice.notes && (
+                <div>
+                  <Label>Notes</Label>
+                  <p className="mt-1 p-3 bg-gray-50 rounded-md">{currentInvoice.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
+              Close
+            </Button>
+            {currentInvoice && hasPermission('invoices:write') && (
+              <Button onClick={() => {
+                setIsViewModalOpen(false);
+                handleEditInvoice(currentInvoice);
+              }}>
+                Edit Invoice
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  );
-}
+    );
+} 

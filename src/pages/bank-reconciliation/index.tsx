@@ -183,31 +183,31 @@ export default function BankReconciliationPage() {
     {
       key: 'date',
       label: 'Date',
-      render: (transaction) => new Date(transaction.date).toLocaleDateString()
+      render: (value, transaction) => value ? new Date(value).toLocaleDateString() : 'N/A'
     },
     {
       key: 'description',
       label: 'Description',
-      render: (transaction) => transaction.description
+      render: (value, transaction) => value || 'N/A'
     },
     {
       key: 'amount',
       label: 'Amount',
-      render: (transaction) => (
-        <span className={transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}>
-          {transaction.type === 'credit' ? '+' : '-'}₵{Math.abs(transaction.amount).toLocaleString()}
+      render: (value, transaction) => (
+        <span className={transaction?.type === 'credit' ? 'text-green-600' : 'text-red-600'}>
+          {transaction?.type === 'credit' ? '+' : '-'}₵{Math.abs(value || 0).toLocaleString()}
                 </span>
             )
         },
         {
       key: 'status',
       label: 'Status',
-      render: (transaction) => getStatusBadge(transaction.status)
+      render: (value, transaction) => getStatusBadge(value || 'pending')
     },
     {
       key: 'reference',
       label: 'Reference',
-      render: (transaction) => transaction.reference || '-'
+      render: (value, transaction) => value || '-'
     }
   ];
 
@@ -309,8 +309,8 @@ export default function BankReconciliationPage() {
       {/* Data Table */}
             <DataTableTemplate
         data={filteredTransactions}
-        columns={columns}
-        loading={loading}
+                columns={columns}
+                loading={loading}
         emptyMessage="No bank transactions found"
         showActions={false}
       />

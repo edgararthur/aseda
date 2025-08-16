@@ -13,6 +13,9 @@ export type Organization = Database['public']['Tables']['organizations']['Row'];
 export type Contact = Database['public']['Tables']['contacts']['Row'];
 export type Invoice = Database['public']['Tables']['invoices']['Row'];
 export type Product = Database['public']['Tables']['products']['Row'];
+export type ChartOfAccount = Database['public']['Tables']['chart_of_accounts']['Row'];
+export type JournalEntry = Database['public']['Tables']['journal_entries']['Row'];
+export type JournalEntryLine = Database['public']['Tables']['journal_entry_lines']['Row'];
 
 export interface Database {
   public: {

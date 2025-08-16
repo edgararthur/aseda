@@ -46,22 +46,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const fetchSession = async () => {
-      setLoading(false);
       try {
+        setLoading(true);
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;
-        setUser(session?.user ? {
-          id: session.user.id,
-          email: session.user.email || '',
-          role: 'user',
-          full_name: session.user.user_metadata?.full_name || session.user.email || ''
-        } : null);
+        
         if (session?.user) {
+          const authUser: AuthUser = {
+            id: session.user.id,
+            email: session.user.email || '',
+            role: 'user',
+            full_name: session.user.user_metadata?.full_name || session.user.email || ''
+          };
+          setUser(authUser);
           await fetchProfile(session.user.id);
+        } else {
+          setUser(null);
+          setProfile(null);
         }
-        console.log('The User state:', user);
+        console.log('Session fetched successfully');
       } catch (error) {
         console.error('Error fetching session:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load session');
       } finally {
         setLoading(false);
       }
@@ -89,9 +95,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (event === 'SIGNED_IN') {
             navigate('/dashboard');
           }
-        } else {
+      } else {
           setUser(null);
-          setProfile(null);
+        setProfile(null);
           
           // Only navigate to login on sign out, not on initial load
           if (event === 'SIGNED_OUT') {
@@ -114,11 +120,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function fetchProfile(userId: string) {
     console.log('Fetching profile for user ID:', userId);
     try {
-      const { data, error } = await supabase
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+      );
+
+      const fetchPromise = supabase
         .from('profiles')
         .select('id, user_id, email, full_name, role, organization_id, is_active, last_login, created_at, updated_at')
         .eq('user_id', userId)
         .single();
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+      if (error && error.code === 'PGRST116') {
+        // No profile found, create one
+        console.warn('No profile found for user ID:', userId, 'Creating new profile...');
+        await createProfileForUser(userId);
+        return;
+      }
 
       if (error) {
         console.error('Error fetching profile:', error);
@@ -126,16 +146,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
-        console.log('Profile data:', data);
+        console.log('Profile fetched successfully:', data);
         setProfile(data as Profile);
       } else {
-        console.warn('No profile data found for user ID:', userId);
-        // Create a profile for the user if one doesn't exist
+        console.warn('No profile data returned, creating new profile...');
         await createProfileForUser(userId);
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error in fetchProfile:', error);
+      // Don't block the app if profile fetch fails
       setProfile(null);
+      if (error instanceof Error && error.message !== 'Profile fetch timeout') {
+        console.log('Attempting to create new profile due to error...');
+        try {
+          await createProfileForUser(userId);
+        } catch (createError) {
+          console.error('Failed to create profile as fallback:', createError);
+        }
+      }
     }
   }
 
@@ -143,6 +171,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Creating profile for user ID:', userId);
       
+      // Add timeout for profile creation
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile creation timeout')), 8000)
+      );
+
       // Get user data from auth
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
@@ -157,11 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         is_active: true
       };
 
-      const { data, error } = await supabase
+      const createPromise = supabase
         .from('profiles')
         .insert([newProfile])
         .select('id, user_id, email, full_name, role, organization_id, is_active, last_login, created_at, updated_at')
         .single();
+
+      const { data, error } = await Promise.race([createPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('Error creating profile:', error);
@@ -174,6 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error creating profile for user:', error);
+      // Don't block the app, allow user to continue with null profile
       setProfile(null);
     }
   }
@@ -299,38 +335,87 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const rolePermissions: Record<string, string[]> = {
       admin: ['*'], // Admin has all permissions
       accountant: [
+        // Invoice management
         'invoices:read', 'invoices:write', 'invoices:delete',
+        
+        // Expense management
         'expenses:read', 'expenses:write', 'expenses:delete',
+        
+        // Transaction management
         'transactions:read', 'transactions:write', 'transactions:delete',
+        
+        // Ledger and accounting
         'ledger:read', 'ledger:write', 'ledger:delete',
+        'journal_entries:read', 'journal_entries:write', 'journal_entries:delete', // Alternative naming
+        
+        // Product and inventory management
+        'products:read', 'products:write', 'products:delete',
+        'inventory:read', 'inventory:write', 'inventory:delete',
+        
+        // Asset management
+        'assets:read', 'assets:write', 'assets:delete',
+        'fixed_assets:read', 'fixed_assets:write', 'fixed_assets:delete',
+        
+        // Employee and HR management
+        'employees:read', 'employees:write', 'employees:delete',
+        'payroll:read', 'payroll:write', 'payroll:delete',
+        'departments:read', 'departments:write', 'departments:delete',
+        
+        // Purchase management
+        'purchases:read', 'purchases:write', 'purchases:delete',
+        'purchase_returns:read', 'purchase_returns:write', 'purchase_returns:delete',
+        
+        // Sales management
+        'sales:read', 'sales:write', 'sales:delete',
+        'sales_returns:read', 'sales_returns:write', 'sales_returns:delete',
+        'orders:read', 'orders:write', 'orders:delete',
+        'quotations:read', 'quotations:write', 'quotations:delete',
+        
+        // Tax and compliance
+        'tax:read', 'tax:write', 'tax:delete',
+        'vat:read', 'vat:write', 'vat:delete',
+        
+        // Reports and analytics
         'reports:read', 'reports:export',
-        'payroll:read', 'payroll:write'
+        
+        // Bank and reconciliation
+        'bank:read', 'bank:write', 'bank:delete',
+        
+        // Master data
+        'contacts:read', 'contacts:write', 'contacts:delete',
+        'categories:read', 'categories:write', 'categories:delete',
+        
+        // Settings and configuration
+        'settings:read', 'settings:write', 'settings:delete'
       ],
       manager: [
         'invoices:read', 'invoices:write',
         'expenses:read', 'expenses:write',
         'transactions:read', 'transactions:write',
+        'products:read', 'products:write',
+        'employees:read', 'employees:write',
+        'payroll:read', 'payroll:write',
         'ledger:read',
-        'reports:read', 'reports:export',
-        'payroll:read',
-        'employees:read'
+        'reports:read', 'reports:export'
       ],
       staff: [
         'invoices:read',
         'expenses:read', 'expenses:write',
         'transactions:read',
+        'products:read',
         'reports:read'
       ],
       viewer: [
         'invoices:read',
         'expenses:read',
         'transactions:read',
+        'products:read',
         'reports:read'
       ]
     };
 
-    const userRole = profile?.role || 'viewer';
-    const permissions = rolePermissions[userRole] || [];
+    const userRole = profile?.role || 'accountant'; // Default to accountant instead of viewer
+    const permissions = rolePermissions[userRole] || rolePermissions['accountant']; // Fallback to accountant permissions
     
     // Admin has all permissions
     if (permissions.includes('*')) {

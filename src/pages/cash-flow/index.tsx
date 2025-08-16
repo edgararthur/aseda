@@ -25,23 +25,23 @@ interface CashFlowData {
   netInvesting: number;
   netFinancing: number;
   netCashFlow: number;
-  beginningCash: number;
-  endingCash: number;
+    beginningCash: number;
+    endingCash: number;
 }
 
 export default function CashFlowPage() {
-  const [data, setData] = useState<CashFlowData | null>(null);
-  const [loading, setLoading] = useState(true);
+    const [data, setData] = useState<CashFlowData | null>(null);
+    const [loading, setLoading] = useState(true);
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [startDate, setStartDate] = useState<Date>(subYears(new Date(), 1));
 
-  useEffect(() => {
+    useEffect(() => {
     fetchData();
   }, [startDate, endDate]);
 
   const fetchData = async () => {
-    try {
-      setLoading(true);
+        try {
+            setLoading(true);
       
       // Mock cash flow data
       const mockData: CashFlowData = {
@@ -73,10 +73,10 @@ export default function CashFlowPage() {
     } catch (error) {
       console.error('Error fetching cash flow:', error);
       toast.error('Failed to fetch cash flow statement');
-    } finally {
-      setLoading(false);
-    }
-  };
+        } finally {
+            setLoading(false);
+        }
+    };
 
   const renderCashFlowSection = (title: string, items: CashFlowItem[], total: number) => {
     return (
@@ -88,24 +88,24 @@ export default function CashFlowPage() {
               <span className="text-sm">{item.description}</span>
               <span className={`font-mono text-sm ${item.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {item.amount >= 0 ? '' : '('}₵{Math.abs(item.amount).toLocaleString()}{item.amount < 0 ? ')' : ''}
-              </span>
-            </div>
-          ))}
+                    </span>
+                </div>
+            ))}
         </div>
         <div className="mt-4 pt-3 border-t border-gray-200">
           <div className="flex justify-between font-semibold">
             <span>Net Cash from {title}</span>
             <span className={`font-mono ${total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {total >= 0 ? '' : '('}₵{Math.abs(total).toLocaleString()}{total < 0 ? ')' : ''}
-            </span>
+                </span>
           </div>
+            </div>
         </div>
-      </div>
     );
   };
 
   if (loading || !data) {
-    return (
+        return (
       <PageTemplate
         title="Cash Flow Statement"
         description="Track cash inflows and outflows across operating, investing, and financing activities."
@@ -114,26 +114,26 @@ export default function CashFlowPage() {
       >
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        </div>
+                </div>
       </PageTemplate>
-    );
-  }
+        );
+    }
 
-  return (
+        return (
     <PageTemplate
-      title="Cash Flow Statement"
+            title="Cash Flow Statement" 
       description="Track cash inflows and outflows across operating, investing, and financing activities."
       showAddButton={false}
       showSearchBar={false}
       showExportImport={false}
       customActions={
-        <div className="flex gap-2">
+                <div className="flex gap-2">
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm">
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {format(endDate, 'PP')}
-              </Button>
+                    </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
               <Calendar
@@ -147,73 +147,73 @@ export default function CashFlowPage() {
           
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
-        </div>
-      }
-    >
+                        Export
+                    </Button>
+                </div>
+            }
+        >
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <Card>
+                <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Operating Cash Flow</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+                    </CardHeader>
+                    <CardContent>
             <div className={`text-2xl font-bold ${data.netOperating >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               ₵{Math.abs(data.netOperating).toLocaleString()}
-            </div>
+                        </div>
             <p className="text-xs text-muted-foreground">Core business activities</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
+                    </CardContent>
+                </Card>
+
+                <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Investing Cash Flow</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+                    </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${data.netInvesting >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               ₵{Math.abs(data.netInvesting).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">Asset investments</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
+                    </CardContent>
+                </Card>
+
+                <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Financing Cash Flow</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+                    </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${data.netFinancing >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               ₵{Math.abs(data.netFinancing).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">Funding activities</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
+                    </CardContent>
+                </Card>
+
+                <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Cash Flow</CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+                    </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${data.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               ₵{Math.abs(data.netCashFlow).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">Total change in cash</p>
-          </CardContent>
-        </Card>
+                    </CardContent>
+                </Card>
       </div>
 
       {/* Cash Flow Statement */}
-      <Card>
-        <CardHeader>
+                <Card>
+                    <CardHeader>
           <CardTitle>Cash Flow Statement</CardTitle>
           <CardDescription>For the period ending {format(endDate, 'PPPP')}</CardDescription>
-        </CardHeader>
-        <CardContent>
+                    </CardHeader>
+                    <CardContent>
           {/* Beginning Cash */}
           <div className="mb-6 p-4 bg-blue-50 rounded-lg">
             <div className="flex justify-between items-center font-semibold text-blue-800">
@@ -237,8 +237,8 @@ export default function CashFlowPage() {
               <span>Net Change in Cash</span>
               <span className={`font-mono ${data.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {data.netCashFlow >= 0 ? '' : '('}₵{Math.abs(data.netCashFlow).toLocaleString()}{data.netCashFlow < 0 ? ')' : ''}
-              </span>
-            </div>
+                                </span>
+                            </div>
           </div>
 
           {/* Ending Cash */}
@@ -247,7 +247,7 @@ export default function CashFlowPage() {
               <span>Cash at End of Period</span>
               <span className="font-mono">₵{data.endingCash.toLocaleString()}</span>
             </div>
-          </div>
+                            </div>
 
           {/* Reconciliation */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -256,21 +256,21 @@ export default function CashFlowPage() {
               <div className="flex justify-between">
                 <span>Beginning Cash</span>
                 <span className="font-mono">₵{data.beginningCash.toLocaleString()}</span>
-              </div>
+                            </div>
               <div className="flex justify-between">
-                <span>Net Change in Cash</span>
+                                <span>Net Change in Cash</span>
                 <span className={`font-mono ${data.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {data.netCashFlow >= 0 ? '+' : ''}₵{data.netCashFlow.toLocaleString()}
-                </span>
-              </div>
+                                </span>
+                            </div>
               <div className="border-t pt-2 flex justify-between font-semibold">
                 <span>Ending Cash</span>
                 <span className="font-mono">₵{data.endingCash.toLocaleString()}</span>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                        </div>
+                        </div>
+                    </CardContent>
+                </Card>
     </PageTemplate>
-  );
-}
+    );
+} 

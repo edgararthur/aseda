@@ -13,12 +13,21 @@ export function Layout() {
     const [isInitializing, setIsInitializing] = useState(true);
 
     useEffect(() => {
-        // Initialize offline storage
+        // Initialize offline storage with timeout
         const initializeOfflineStorage = async () => {
             try {
-                await offlineStorage.init();
+                console.log('Initializing offline storage...');
+                
+                // Add timeout to prevent hanging
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Offline storage initialization timeout')), 5000)
+                );
+
+                await Promise.race([offlineStorage.init(), timeoutPromise]);
+                console.log('Offline storage initialized successfully');
             } catch (error) {
                 console.error('Failed to initialize offline storage:', error);
+                // Don't block the app if offline storage fails
             } finally {
                 setIsInitializing(false);
             }
@@ -61,7 +70,7 @@ export function Layout() {
         return (
             <div className="h-screen w-full bg-background flex items-center justify-center">
                 <div className="text-center space-y-4">
-                    <LoadingSpinner size="lg" />
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
                     <p className="text-muted-foreground">Initializing application...</p>
                 </div>
             </div>

@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import { useDepartments, useEmployees } from '@/hooks/use-database';
+import type { Department } from '@/lib/database';
 import { Briefcase, Users, DollarSign, Building2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -13,163 +14,113 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-interface Department {
-    id: string;
-  departmentName: string;
-  departmentCode: string;
-  description: string;
-    manager: string;
-  employeeCount: number;
-    budget: number;
-  status: 'active' | 'inactive';
-  location: string;
-  createdAt: string;
-}
-
 export default function DepartmentsPage() {
   const { hasPermission } = useAuth();
-    const [departments, setDepartments] = useState<Department[]>([]);
-    const [loading, setLoading] = useState(true);
+  const {
+    data: departments,
+    loading,
+    error,
+    createDepartment,
+    update,
+    delete: deleteDepartment,
+    searchData,
+    refresh
+  } = useDepartments({ realtime: true });
+
+  const { data: employees } = useEmployees({ realtime: true });
+
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentDepartment, setCurrentDepartment] = useState<Partial<Department> | null>(null);
+  const [currentDepartment, setCurrentDepartment] = useState<Department | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-  // Form state
-  const [departmentName, setDepartmentName] = useState('');
-  const [departmentCode, setDepartmentCode] = useState('');
-  const [description, setDescription] = useState('');
-  const [manager, setManager] = useState('');
-  const [budget, setBudget] = useState('');
-  const [location, setLocation] = useState('');
-  const [status, setStatus] = useState<'active' | 'inactive'>('active');
+  // Form state matching database schema
+  const [formData, setFormData] = useState({
+    code: '',
+    name: '',
+    manager_id: 'none',
+    budget: 0,
+    status: 'active'
+  });
 
+  // Handle search
   useEffect(() => {
-    fetchDepartments();
-  }, []);
+    if (searchTerm.trim()) {
+      searchData(searchTerm);
+    } else {
+      refresh();
+    }
+  }, [searchTerm, searchData, refresh]);
 
-    const fetchDepartments = async () => {
-        try {
-      // Mock departments data
-      const mockDepartments: Department[] = [
-        {
-          id: '1',
-          departmentName: 'Human Resources',
-          departmentCode: 'HR',
-          description: 'Manages employee relations, recruitment, and HR policies',
-          manager: 'Sarah Johnson',
-          employeeCount: 5,
-          budget: 150000,
-          status: 'active',
-          location: 'Building A, Floor 2',
-          createdAt: '2023-01-15T10:00:00Z'
-        },
-        {
-          id: '2',
-          departmentName: 'Information Technology',
-          departmentCode: 'IT',
-          description: 'Manages technology infrastructure and software development',
-          manager: 'Mike Chen',
-          employeeCount: 12,
-          budget: 300000,
-          status: 'active',
-          location: 'Building B, Floor 3',
-          createdAt: '2023-01-15T10:00:00Z'
-        },
-        {
-          id: '3',
-          departmentName: 'Finance & Accounting',
-          departmentCode: 'FIN',
-          description: 'Handles financial planning, accounting, and compliance',
-          manager: 'Jennifer Davis',
-          employeeCount: 8,
-          budget: 200000,
-          status: 'active',
-          location: 'Building A, Floor 1',
-          createdAt: '2023-01-15T10:00:00Z'
-        },
-        {
-          id: '4',
-          departmentName: 'Sales & Marketing',
-          departmentCode: 'SALES',
-          description: 'Drives revenue growth and customer acquisition',
-          manager: 'Robert Wilson',
-          employeeCount: 15,
-          budget: 400000,
-          status: 'active',
-          location: 'Building C, Floor 1',
-          createdAt: '2023-01-15T10:00:00Z'
-        }
-      ];
+  // Reset form
+  const resetForm = () => {
+    setFormData({
+      code: '',
+      name: '',
+      manager_id: 'none',
+      budget: 0,
+      status: 'active'
+    });
+  };
 
-      setDepartments(mockDepartments);
+  // Handle create department
+  const handleCreateDepartment = async () => {
+    try {
+      await createDepartment(formData);
+      setIsModalOpen(false);
+      resetForm();
     } catch (error) {
-      console.error('Error fetching departments:', error);
-      toast.error('Failed to fetch departments');
-        } finally {
-            setLoading(false);
-        }
-    };
+      // Error is already handled by the hook
+    }
+  };
+
+  // Handle edit department
+  const handleEditDepartment = (department: Department) => {
+    setCurrentDepartment(department);
+    setFormData({
+      code: department.code,
+      name: department.name,
+      manager_id: department.manager_id || 'none',
+      budget: department.budget,
+      status: department.status
+    });
+    setIsModalOpen(true);
+  };
+
+  // Handle save edit
+  const handleSaveEdit = async () => {
+    if (!currentDepartment) return;
+    
+    try {
+      await update(currentDepartment.id, formData);
+      setIsModalOpen(false);
+      resetForm();
+      setCurrentDepartment(null);
+    } catch (error) {
+      // Error is already handled by the hook
+    }
+  };
+
+  // Handle delete with confirmation
+  const handleDeleteDepartment = async (department: Department) => {
+    if (window.confirm(`Are you sure you want to delete department ${department.name}?`)) {
+      try {
+        await deleteDepartment(department.id);
+      } catch (error) {
+        // Error is already handled by the hook
+      }
+    }
+  };
+
+  const getManagerName = (managerId: string | null) => {
+    if (!managerId || !employees) return 'Not Assigned';
+    const manager = (employees as any[]).find((emp: any) => emp.id === managerId);
+    return manager ? `${manager.first_name} ${manager.last_name}` : 'Not Found';
+  };
 
   const handleAdd = () => {
     setCurrentDepartment(null);
-    setDepartmentName('');
-    setDepartmentCode('');
-    setDescription('');
-    setManager('');
-    setBudget('');
-    setLocation('');
-    setStatus('active');
+    resetForm();
     setIsModalOpen(true);
-  };
-
-  const handleEdit = (department: Department) => {
-    setCurrentDepartment(department);
-    setDepartmentName(department.departmentName);
-    setDepartmentCode(department.departmentCode);
-    setDescription(department.description);
-    setManager(department.manager);
-    setBudget(department.budget.toString());
-    setLocation(department.location);
-    setStatus(department.status);
-    setIsModalOpen(true);
-  };
-
-  const handleSave = async () => {
-    try {
-      const departmentData = {
-        id: currentDepartment?.id || Date.now().toString(),
-        departmentName,
-        departmentCode,
-        description,
-        manager,
-        employeeCount: currentDepartment?.employeeCount || 0,
-        budget: parseFloat(budget) || 0,
-        status,
-        location,
-        createdAt: currentDepartment?.createdAt || new Date().toISOString()
-      };
-
-      if (currentDepartment) {
-        setDepartments(prev => prev.map(d => d.id === currentDepartment.id ? { ...departmentData, id: currentDepartment.id } : d));
-        toast.success('Department updated successfully');
-      } else {
-        setDepartments(prev => [...prev, departmentData]);
-        toast.success('Department created successfully');
-      }
-
-      setIsModalOpen(false);
-    } catch (error) {
-      toast.error('Failed to save department');
-    }
-  };
-
-  const handleDelete = async (departmentId: string) => {
-    try {
-      setDepartments(prev => prev.filter(d => d.id !== departmentId));
-            toast.success('Department deleted successfully');
-    } catch (error) {
-            toast.error('Failed to delete department');
-    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -185,60 +136,41 @@ export default function DepartmentsPage() {
 
   const columns: Column[] = [
     {
-      key: 'departmentCode',
+      key: 'code',
       label: 'Code',
-      render: (dept) => <span className="font-mono text-sm">{dept.departmentCode}</span>
+      render: (value) => <span className="font-mono text-sm">{value}</span>
     },
     {
-      key: 'departmentName',
+      key: 'name',
       label: 'Department Name',
-      render: (dept) => dept.departmentName
+      render: (value) => value
     },
     {
-      key: 'manager',
+      key: 'manager_id',
       label: 'Manager',
-      render: (dept) => dept.manager
+      render: (value, row) => getManagerName(value)
     },
     {
-      key: 'employeeCount',
+      key: 'employee_count',
       label: 'Employees',
-      render: (dept) => dept.employeeCount.toString()
+      render: (value) => value?.toString() || '0'
     },
     {
       key: 'budget',
       label: 'Budget',
-      render: (dept) => `₵${dept.budget.toLocaleString()}`
-    },
-    {
-      key: 'location',
-      label: 'Location',
-      render: (dept) => dept.location
+      render: (value) => `₵${value?.toLocaleString() || 0}`
     },
     {
       key: 'status',
       label: 'Status',
-      render: (dept) => getStatusBadge(dept.status)
+      render: (value) => getStatusBadge(value)
     }
   ];
 
-  const actions = [
-    {
-      label: 'Edit',
-      onClick: (dept: Department) => handleEdit(dept),
-      variant: 'outline' as const,
-      show: () => hasPermission('departments:write')
-    },
-    {
-      label: 'Delete',
-      onClick: (dept: Department) => handleDelete(dept.id),
-      variant: 'destructive' as const,
-      show: () => hasPermission('departments:delete')
-    }
-  ];
-
-  const totalEmployees = departments.reduce((sum, dept) => sum + dept.employeeCount, 0);
-  const totalBudget = departments.reduce((sum, dept) => sum + dept.budget, 0);
-  const activeDepartments = departments.filter(dept => dept.status === 'active').length;
+  const typedDepartments = (departments as Department[]) || [];
+  const totalEmployees = typedDepartments.reduce((sum, dept) => sum + (dept.employee_count || 0), 0);
+  const totalBudget = typedDepartments.reduce((sum, dept) => sum + dept.budget, 0);
+  const activeDepartments = typedDepartments.filter(dept => dept.status === 'active').length;
 
     return (
     <PageTemplate
@@ -291,7 +223,7 @@ export default function DepartmentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {departments.length > 0 ? Math.round(totalEmployees / departments.length) : 0}
+              {typedDepartments.length > 0 ? Math.round(totalEmployees / typedDepartments.length) : 0}
             </div>
             <p className="text-xs text-muted-foreground">Employees per dept</p>
           </CardContent>
@@ -300,13 +232,14 @@ export default function DepartmentsPage() {
 
       {/* Data Table */}
       <DataTableTemplate
-        data={departments.filter(dept => 
-          dept.departmentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          dept.departmentCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          dept.manager.toLowerCase().includes(searchTerm.toLowerCase())
+        data={typedDepartments.filter(dept => 
+          dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          dept.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          getManagerName(dept.manager_id).toLowerCase().includes(searchTerm.toLowerCase())
         )}
                 columns={columns}
-        actions={actions}
+        onEdit={handleEditDepartment}
+        onDelete={handleDeleteDepartment}
                 loading={loading}
         emptyMessage="No departments found"
       />
@@ -326,8 +259,8 @@ export default function DepartmentsPage() {
                 <Label htmlFor="dept-name">Department Name</Label>
                 <Input
                   id="dept-name"
-                  value={departmentName}
-                  onChange={(e) => setDepartmentName(e.target.value)}
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Human Resources"
                 />
               </div>
@@ -336,33 +269,32 @@ export default function DepartmentsPage() {
                 <Label htmlFor="dept-code">Department Code</Label>
                 <Input
                   id="dept-code"
-                  value={departmentCode}
-                  onChange={(e) => setDepartmentCode(e.target.value)}
+                  value={formData.code}
+                  onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
                   placeholder="HR"
                 />
               </div>
             </div>
             
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Department description..."
-                rows={3}
-              />
-            </div>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="manager">Manager</Label>
-                <Input
-                  id="manager"
-                  value={manager}
-                  onChange={(e) => setManager(e.target.value)}
-                  placeholder="Manager name"
-                />
+                <Select 
+                  value={formData.manager_id} 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, manager_id: value === "none" ? "" : value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Manager</SelectItem>
+                    {(employees as any[] || []).filter((emp: any) => emp.status === 'active').map((employee: any) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.first_name} {employee.last_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               
               <div>
@@ -370,36 +302,27 @@ export default function DepartmentsPage() {
                 <Input
                   id="budget"
                   type="number"
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
+                  value={formData.budget}
+                  onChange={(e) => setFormData(prev => ({ ...prev, budget: parseFloat(e.target.value) || 0 }))}
                   placeholder="150000"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Building A, Floor 1"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="status">Status</Label>
-                <Select value={status} onValueChange={(value: 'active' | 'inactive') => setStatus(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select 
+                value={formData.status} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           
@@ -407,7 +330,7 @@ export default function DepartmentsPage() {
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={currentDepartment ? handleSaveEdit : handleCreateDepartment}>
               {currentDepartment ? 'Update' : 'Create'} Department
             </Button>
           </DialogFooter>

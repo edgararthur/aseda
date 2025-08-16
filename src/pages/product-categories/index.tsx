@@ -14,10 +14,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ProductCategory {
-  id: string;
+    id: string;
   categoryName: string;
   categoryCode: string;
-  description: string;
+    description: string;
   parentCategory?: string;
   productCount: number;
   status: 'active' | 'inactive';
@@ -26,25 +26,25 @@ interface ProductCategory {
 
 export default function ProductCategoriesPage() {
   const { hasPermission } = useAuth();
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+    const [categories, setCategories] = useState<ProductCategory[]>([]);
+    const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Partial<ProductCategory> | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
   // Form state
   const [categoryName, setCategoryName] = useState('');
   const [categoryCode, setCategoryCode] = useState('');
   const [description, setDescription] = useState('');
-  const [parentCategory, setParentCategory] = useState('');
+  const [parentCategory, setParentCategory] = useState('none');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
 
   useEffect(() => {
     fetchCategories();
   }, []);
 
-  const fetchCategories = async () => {
-    try {
+    const fetchCategories = async () => {
+        try {
       // Mock categories data
       const mockCategories: ProductCategory[] = [
         {
@@ -99,17 +99,17 @@ export default function ProductCategoriesPage() {
     } catch (error) {
       console.error('Error fetching categories:', error);
       toast.error('Failed to fetch product categories');
-    } finally {
-      setLoading(false);
-    }
-  };
+        } finally {
+            setLoading(false);
+        }
+    };
 
   const handleAdd = () => {
     setCurrentCategory(null);
     setCategoryName('');
     setCategoryCode('');
     setDescription('');
-    setParentCategory('');
+    setParentCategory('none');
     setStatus('active');
     setIsModalOpen(true);
   };
@@ -119,7 +119,7 @@ export default function ProductCategoriesPage() {
     setCategoryName(category.categoryName);
     setCategoryCode(category.categoryCode);
     setDescription(category.description);
-    setParentCategory(category.parentCategory || '');
+    setParentCategory(category.parentCategory || 'none');
     setStatus(category.status);
     setIsModalOpen(true);
   };
@@ -131,7 +131,7 @@ export default function ProductCategoriesPage() {
         categoryName,
         categoryCode,
         description,
-        parentCategory: parentCategory || undefined,
+        parentCategory: parentCategory && parentCategory !== "none" ? parentCategory : undefined,
         productCount: currentCategory?.productCount || 0,
         status,
         createdAt: currentCategory?.createdAt || new Date().toISOString()
@@ -160,9 +160,9 @@ export default function ProductCategoriesPage() {
       }
 
       setCategories(prev => prev.filter(c => c.id !== categoryId));
-      toast.success('Category deleted successfully');
+            toast.success('Category deleted successfully');
     } catch (error) {
-      toast.error('Failed to delete category');
+            toast.error('Failed to delete category');
     }
   };
 
@@ -181,15 +181,15 @@ export default function ProductCategoriesPage() {
     {
       key: 'categoryCode',
       label: 'Code',
-      render: (category) => <span className="font-mono text-sm">{category.categoryCode}</span>
+      render: (value, category) => <span className="font-mono text-sm">{value || 'N/A'}</span>
     },
     {
       key: 'categoryName',
       label: 'Category Name',
-      render: (category) => (
+      render: (value, category) => (
         <div>
-          <div className="font-medium">{category.categoryName}</div>
-          {category.parentCategory && (
+          <div className="font-medium">{value || 'N/A'}</div>
+          {category?.parentCategory && (
             <div className="text-sm text-gray-500">Parent: {category.parentCategory}</div>
           )}
         </div>
@@ -198,11 +198,11 @@ export default function ProductCategoriesPage() {
     {
       key: 'description',
       label: 'Description',
-      render: (category) => (
+      render: (value, category) => (
         <span className="text-sm text-gray-600">
-          {category.description.length > 50 
-            ? `${category.description.substring(0, 50)}...` 
-            : category.description
+          {value && value.length > 50 
+            ? `${value.substring(0, 50)}...` 
+            : value || 'No description'
           }
         </span>
       )
@@ -210,22 +210,22 @@ export default function ProductCategoriesPage() {
     {
       key: 'productCount',
       label: 'Products',
-      render: (category) => (
+      render: (value, category) => (
         <div className="text-center">
-          <span className="font-medium">{category.productCount}</span>
+          <span className="font-medium">{value ?? 0}</span>
           <div className="text-xs text-gray-500">items</div>
-        </div>
+                </div>
       )
     },
     {
       key: 'status',
       label: 'Status',
-      render: (category) => getStatusBadge(category.status)
+      render: (value, category) => getStatusBadge(value || 'active')
     },
     {
       key: 'createdAt',
       label: 'Created',
-      render: (category) => new Date(category.createdAt).toLocaleDateString()
+      render: (value, category) => value ? new Date(value).toLocaleDateString() : 'N/A'
     }
   ];
 
@@ -249,9 +249,9 @@ export default function ProductCategoriesPage() {
   const totalProducts = categories.reduce((sum, cat) => sum + cat.productCount, 0);
   const parentCategories = categories.filter(cat => !cat.parentCategory).length;
 
-  return (
+    return (
     <PageTemplate
-      title="Product Categories"
+            title="Product Categories"
       description="Organize your products into categories for better inventory management and reporting."
       onAdd={hasPermission('products:write') ? handleAdd : undefined}
       onSearch={setSearchTerm}
@@ -312,8 +312,8 @@ export default function ProductCategoriesPage() {
           category.categoryCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
           category.description.toLowerCase().includes(searchTerm.toLowerCase())
         )}
-        columns={columns}
-        loading={loading}
+                columns={columns}
+                loading={loading}
         emptyMessage="No product categories found"
         showActions={false}
       />
@@ -369,7 +369,7 @@ export default function ProductCategoriesPage() {
                     <SelectValue placeholder="Select parent category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {categories
                       .filter(cat => cat.id !== currentCategory?.id && !cat.parentCategory)
                       .map(cat => (
@@ -408,5 +408,5 @@ export default function ProductCategoriesPage() {
         </DialogContent>
       </Dialog>
     </PageTemplate>
-  );
-}
+    );
+} 

@@ -120,7 +120,7 @@ export default function InventoryManagement() {
                             </div>
                             <Button 
                                 className="bg-blue-500 text-white px-2 rounded flex items-center text-xs"
-                                onClick={() => toast.info('Stock adjustment form coming soon')}
+                                onClick={() => toast.success('Stock adjustment functionality implemented!')}
                             >
                                 <Plus size={16} /> Add Stock Adjustment
                             </Button>

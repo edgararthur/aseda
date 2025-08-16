@@ -97,42 +97,42 @@ export default function StockManagementPage() {
     {
       key: 'sku',
       label: 'SKU',
-      render: (item) => <span className="font-mono text-sm">{item.sku}</span>
+      render: (value, item) => <span className="font-mono text-sm">{value || 'N/A'}</span>
     },
     {
       key: 'productName',
       label: 'Product Name',
-      render: (item) => item.productName
+      render: (value, item) => value || 'N/A'
     },
     {
       key: 'category',
       label: 'Category',
-      render: (item) => item.category
+      render: (value, item) => value || 'N/A'
     },
     {
       key: 'currentStock',
       label: 'Current Stock',
-      render: (item) => item.currentStock.toString()
+      render: (value, item) => (value ?? 0).toString()
     },
     {
       key: 'reorderLevel',
       label: 'Reorder Level',
-      render: (item) => item.reorderLevel.toString()
+      render: (value, item) => (value ?? 0).toString()
     },
     {
       key: 'unitPrice',
       label: 'Unit Price',
-      render: (item) => `₵${item.unitPrice.toLocaleString()}`
+      render: (value, item) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'totalValue',
       label: 'Total Value',
-      render: (item) => `₵${item.totalValue.toLocaleString()}`
+      render: (value, item) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'status',
       label: 'Status',
-      render: (item) => getStatusBadge(item.status)
+      render: (value, item) => getStatusBadge(value || 'in-stock')
     }
   ];
 

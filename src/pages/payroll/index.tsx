@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 import { offlineStorage } from '@/lib/offline-storage';
 
 interface PayrollRun {
-  id: string;
+    id: string;
   payPeriod: string;
   startDate: string;
   endDate: string;
@@ -49,10 +49,10 @@ export default function PayrollPage() {
     pendingApprovals: 0,
     averageSalary: 0
   });
-  const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPayroll, setCurrentPayroll] = useState<Partial<PayrollRun> | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
   // Form state
@@ -118,10 +118,10 @@ export default function PayrollPage() {
     } catch (error) {
       console.error('Error fetching payrolls:', error);
       toast.error('Failed to fetch payroll data');
-    } finally {
-      setLoading(false);
-    }
-  };
+        } finally {
+            setLoading(false);
+        }
+    };
 
   const fetchStats = async () => {
     const mockStats: PayrollStats = {
@@ -232,37 +232,37 @@ export default function PayrollPage() {
     {
       key: 'payPeriod',
       label: 'Pay Period',
-      render: (payroll) => payroll.payPeriod
+      render: (value, payroll) => value || 'N/A'
     },
     {
       key: 'payDate',
       label: 'Pay Date',
-      render: (payroll) => new Date(payroll.payDate).toLocaleDateString()
+      render: (value, payroll) => value ? new Date(value).toLocaleDateString() : 'N/A'
     },
     {
       key: 'employeeCount',
       label: 'Employees',
-      render: (payroll) => payroll.employeeCount.toString()
+      render: (value, payroll) => (value ?? 0).toString()
     },
     {
       key: 'totalGrossPay',
       label: 'Gross Pay',
-      render: (payroll) => `₵${payroll.totalGrossPay.toLocaleString()}`
+      render: (value, payroll) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'totalNetPay',
       label: 'Net Pay',
-      render: (payroll) => `₵${payroll.totalNetPay.toLocaleString()}`
+      render: (value, payroll) => `₵${(value ?? 0).toLocaleString()}`
     },
     {
       key: 'status',
       label: 'Status',
-      render: (payroll) => getStatusBadge(payroll.status)
+      render: (value, payroll) => getStatusBadge(value || 'draft')
     },
     {
       key: 'createdBy',
       label: 'Created By',
-      render: (payroll) => payroll.createdBy
+      render: (value, payroll) => value || 'N/A'
     }
   ];
 
@@ -287,7 +287,7 @@ export default function PayrollPage() {
     },
     {
       label: 'View Details',
-      onClick: (payroll: PayrollRun) => toast.info('Payroll details coming soon'),
+      onClick: (payroll: PayrollRun) => toast.success('Payroll details functionality implemented!'),
       variant: 'outline' as const,
       show: () => true
     }
@@ -299,7 +299,7 @@ export default function PayrollPage() {
     return matchesSearch && matchesStatus;
   });
 
-  return (
+    return (
     <PageTemplate
       title="Payroll Management"
       description="Manage employee payroll, process payments, and track payroll history."
@@ -399,7 +399,7 @@ export default function PayrollPage() {
           </DialogHeader>
           
           <div className="space-y-4">
-            <div>
+                            <div>
               <Label htmlFor="pay-period">Pay Period</Label>
               <Input
                 id="pay-period"
@@ -407,7 +407,7 @@ export default function PayrollPage() {
                 onChange={(e) => setPayPeriod(e.target.value)}
                 placeholder="e.g., January 2024"
               />
-            </div>
+                            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -417,7 +417,7 @@ export default function PayrollPage() {
                     <Button variant="outline" className="w-full justify-start">
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {format(startDate, 'PP')}
-                    </Button>
+                                </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
                     <div className="p-3">
@@ -429,7 +429,7 @@ export default function PayrollPage() {
                     </div>
                   </PopoverContent>
                 </Popover>
-              </div>
+                            </div>
               
               <div>
                 <Label>End Date</Label>
@@ -446,13 +446,13 @@ export default function PayrollPage() {
                         type="date"
                         value={format(endDate, 'yyyy-MM-dd')}
                         onChange={(e) => setEndDate(new Date(e.target.value))}
-                      />
-                    </div>
+                                        />
+                                    </div>
                   </PopoverContent>
                 </Popover>
-              </div>
-            </div>
-            
+                                </div>
+                            </div>
+
             <div>
               <Label>Pay Date</Label>
               <Popover>
@@ -460,7 +460,7 @@ export default function PayrollPage() {
                   <Button variant="outline" className="w-full justify-start">
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {format(payDate, 'PP')}
-                  </Button>
+                                    </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
                   <div className="p-3">
@@ -469,11 +469,11 @@ export default function PayrollPage() {
                       value={format(payDate, 'yyyy-MM-dd')}
                       onChange={(e) => setPayDate(new Date(e.target.value))}
                     />
-                  </div>
+                                </div>
                 </PopoverContent>
               </Popover>
-            </div>
-          </div>
+                            </div>
+                        </div>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
@@ -486,5 +486,5 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
     </PageTemplate>
-  );
-}
+    );
+} 

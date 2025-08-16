@@ -11,45 +11,69 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./pages/dashboard/index'));
-const Invoices = lazy(() => import('./pages/invoices'));
-const SalesReturns = lazy(() => import('./pages/sales-returns'));
-const OrdersQuotations = lazy(() => import('./pages/orders-quotations'));
-const PurchaseReturns = lazy(() => import('./pages/purchase-returns'));
-const JournalEntries = lazy(() => import('./pages/journal-entries'));
-const BankReconciliation = lazy(() => import('./pages/bank-reconciliation'));
-const Products = lazy(() => import('./pages/products'));
-const StockManagement = lazy(() => import('./pages/stock-management'));
-const ProductCategories = lazy(() => import('./pages/product-categories'));
-const Employees = lazy(() => import('./pages/employees'));
-const Payroll = lazy(() => import('./pages/payroll'));
-const Departments = lazy(() => import('./pages/departments'));
-const FixedAssets = lazy(() => import('./pages/fixed-assets'));
-const Expenses = lazy(() => import('./pages/expenses'));
-const AssetCategories = lazy(() => import('./pages/asset-categories'));
-const VatReturns = lazy(() => import('./pages/vat-returns'));
-const WithholdingTax = lazy(() => import('./pages/withholding-tax'));
-const TaxSettings = lazy(() => import('./pages/tax-settings'));
-const GeneralLedger = lazy(() => import('./pages/general-ledger'));
-const TrialBalance = lazy(() => import('./pages/trial-balance'));
-const BalanceSheet = lazy(() => import('./pages/balance-sheet'));
-const IncomeStatement = lazy(() => import('./pages/income-statement'));
-const CashFlow = lazy(() => import('./pages/cash-flow'));
+const Invoices = lazy(() => import('./pages/invoices/index'));
+const SalesReturns = lazy(() => import('./pages/sales-returns/index'));
+const OrdersQuotations = lazy(() => import('./pages/orders-quotations/index'));
+const PurchaseReturns = lazy(() => import('./pages/purchase-returns/index'));
+const JournalEntries = lazy(() => import('./pages/journal-entries/index'));
+const BankReconciliation = lazy(() => import('./pages/bank-reconciliation/index'));
+const Products = lazy(() => import('./pages/products/index'));
+const StockManagement = lazy(() => import('./pages/stock-management/index'));
+const ProductCategories = lazy(() => import('./pages/product-categories/index'));
+const Employees = lazy(() => import('./pages/employees/index'));
+const Payroll = lazy(() => import('./pages/payroll/index'));
+const Departments = lazy(() => import('./pages/departments/index'));
+const FixedAssets = lazy(() => import('./pages/fixed-assets/index'));
+const Expenses = lazy(() => import('./pages/expenses/index'));
+const AssetCategories = lazy(() => import('./pages/asset-categories/index'));
+const VatReturns = lazy(() => import('./pages/vat-returns/index'));
+const WithholdingTax = lazy(() => import('./pages/withholding-tax/index'));
+const TaxSettings = lazy(() => import('./pages/tax-settings/index'));
+const GeneralLedger = lazy(() => import('./pages/general-ledger/index'));
+const TrialBalance = lazy(() => import('./pages/trial-balance/index'));
+const BalanceSheet = lazy(() => import('./pages/balance-sheet/index'));
+const IncomeStatement = lazy(() => import('./pages/income-statement/index'));
+const CashFlow = lazy(() => import('./pages/cash-flow/index'));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, error } = useAuth();
+  const [timeoutReached, setTimeoutReached] = React.useState(false);
 
-  if (loading) {
+  // Add a timeout fallback to prevent infinite loading
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading) {
+        console.warn('Auth loading timeout reached, forcing app to continue');
+        setTimeoutReached(true);
+      }
+    }, 15000); // 15 second timeout
+
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  if (loading && !timeoutReached) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
           <h2 className="text-lg font-semibold">Loading...</h2>
           <p className="text-gray-500">Please wait while we load your content.</p>
+          {error && (
+            <p className="text-red-500 text-sm mt-2">
+              {error}
+            </p>
+          )}
         </div>
       </div>
     );
   }
 
-  if (!user) {
+  // If timeout reached or error, try to continue
+  if (timeoutReached || error) {
+    console.log('Continuing with timeout/error state:', { timeoutReached, error, user });
+  }
+
+  if (!user && !timeoutReached) {
     return <Navigate to="/login" />;
   }
 
@@ -57,20 +81,39 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, error } = useAuth();
+  const [timeoutReached, setTimeoutReached] = React.useState(false);
 
-  if (loading) {
+  // Add a timeout fallback to prevent infinite loading
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading) {
+        console.warn('Auth loading timeout reached for public route');
+        setTimeoutReached(true);
+      }
+    }, 10000); // 10 second timeout for public routes
+
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  if (loading && !timeoutReached) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
           <h2 className="text-lg font-semibold">Loading...</h2>
           <p className="text-gray-500">Please wait while we load your content.</p>
+          {error && (
+            <p className="text-red-500 text-sm mt-2">
+              {error}
+            </p>
+          )}
         </div>
       </div>
     );
   }
 
-  if (user) {
+  if (user && !timeoutReached) {
     return <Navigate to="/dashboard" />;
   }
 

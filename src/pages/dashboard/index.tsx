@@ -166,28 +166,40 @@ export default function DashboardPage() {
       title: 'Create Invoice',
       description: 'Generate a new customer invoice',
       icon: FileText,
-      action: () => toast.info('Create Invoice - Coming soon!'),
+      action: () => {
+        toast.success('Redirecting to create invoice...');
+        window.location.href = '/dashboard/invoices';
+      },
       color: 'bg-blue-500'
     },
     {
       title: 'Record Expense',
       description: 'Add a new business expense',
       icon: CreditCard,
-      action: () => toast.info('Record Expense - Coming soon!'),
+      action: () => {
+        toast.success('Redirecting to expenses...');
+        window.location.href = '/dashboard/expenses';
+      },
       color: 'bg-red-500'
     },
     {
       title: 'Add Transaction',
       description: 'Record a financial transaction',
       icon: DollarSign,
-      action: () => toast.info('Add Transaction - Coming soon!'),
+      action: () => {
+        toast.success('Redirecting to journal entries...');
+        window.location.href = '/dashboard/journal-entries';
+      },
       color: 'bg-green-500'
     },
     {
       title: 'Process Payroll',
       description: 'Run employee payroll',
       icon: Users,
-      action: () => toast.info('Process Payroll - Coming soon!'),
+      action: () => {
+        toast.success('Redirecting to payroll...');
+        window.location.href = '/dashboard/payroll';
+      },
       color: 'bg-purple-500'
     }
   ];

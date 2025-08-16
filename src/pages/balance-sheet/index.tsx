@@ -270,9 +270,9 @@ export default function BalanceSheetPage() {
           <CardContent>
             <div className="text-2xl font-bold">₵{balanceSheet.assets.totalAssets.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Current + Non-Current</p>
-          </CardContent>
-        </Card>
-        
+                    </CardContent>
+                </Card>
+
                     <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>

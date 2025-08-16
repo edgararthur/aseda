@@ -14,10 +14,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AssetCategory {
-  id: string;
+    id: string;
   categoryName: string;
   categoryCode: string;
-  description: string;
+    description: string;
   depreciationMethod: 'straight-line' | 'declining-balance' | 'units-of-production';
   usefulLife: number;
   depreciationRate: number;
@@ -28,11 +28,11 @@ interface AssetCategory {
 
 export default function AssetCategoriesPage() {
   const { hasPermission } = useAuth();
-  const [categories, setCategories] = useState<AssetCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+    const [categories, setCategories] = useState<AssetCategory[]>([]);
+    const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Partial<AssetCategory> | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
   // Form state
   const [categoryName, setCategoryName] = useState('');
@@ -47,8 +47,8 @@ export default function AssetCategoriesPage() {
     fetchCategories();
   }, []);
 
-  const fetchCategories = async () => {
-    try {
+    const fetchCategories = async () => {
+        try {
       // Mock asset categories data
       const mockCategories: AssetCategory[] = [
         {
@@ -117,10 +117,10 @@ export default function AssetCategoriesPage() {
     } catch (error) {
       console.error('Error fetching asset categories:', error);
       toast.error('Failed to fetch asset categories');
-    } finally {
-      setLoading(false);
-    }
-  };
+        } finally {
+            setLoading(false);
+        }
+    };
 
   const handleAdd = () => {
     setCurrentCategory(null);
@@ -193,9 +193,9 @@ export default function AssetCategoriesPage() {
       }
 
       setCategories(prev => prev.filter(c => c.id !== categoryId));
-      toast.success('Asset category deleted successfully');
+            toast.success('Asset category deleted successfully');
     } catch (error) {
-      toast.error('Failed to delete asset category');
+            toast.error('Failed to delete asset category');
     }
   };
 
@@ -225,42 +225,42 @@ export default function AssetCategoriesPage() {
     {
       key: 'categoryCode',
       label: 'Code',
-      render: (category) => <span className="font-mono text-sm">{category.categoryCode}</span>
+      render: (value, category) => <span className="font-mono text-sm">{value || 'N/A'}</span>
     },
     {
       key: 'categoryName',
       label: 'Category Name',
-      render: (category) => category.categoryName
+      render: (value, category) => value || 'N/A'
     },
     {
       key: 'depreciationMethod',
       label: 'Depreciation Method',
-      render: (category) => getMethodBadge(category.depreciationMethod)
+      render: (value, category) => getMethodBadge(value || 'straight-line')
     },
     {
       key: 'usefulLife',
       label: 'Useful Life',
-      render: (category) => `${category.usefulLife} years`
+      render: (value, category) => `${value ?? 0} years`
     },
     {
       key: 'depreciationRate',
       label: 'Depreciation Rate',
-      render: (category) => `${category.depreciationRate.toFixed(2)}%`
+      render: (value, category) => `${(value ?? 0).toFixed(2)}%`
     },
     {
       key: 'assetCount',
       label: 'Assets',
-      render: (category) => (
+      render: (value, category) => (
         <div className="text-center">
-          <span className="font-medium">{category.assetCount}</span>
+          <span className="font-medium">{value ?? 0}</span>
           <div className="text-xs text-gray-500">assets</div>
-        </div>
+                </div>
       )
     },
     {
       key: 'status',
       label: 'Status',
-      render: (category) => getStatusBadge(category.status)
+      render: (value, category) => getStatusBadge(value || 'active')
     }
   ];
 
@@ -286,9 +286,9 @@ export default function AssetCategoriesPage() {
     ? Math.round(categories.reduce((sum, cat) => sum + cat.usefulLife, 0) / categories.length)
     : 0;
 
-  return (
+    return (
     <PageTemplate
-      title="Asset Categories"
+            title="Asset Categories"
       description="Define asset categories with depreciation methods and useful life settings."
       onAdd={hasPermission('assets:write') ? handleAdd : undefined}
       onSearch={setSearchTerm}
@@ -349,8 +349,8 @@ export default function AssetCategoriesPage() {
           category.categoryCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
           category.description.toLowerCase().includes(searchTerm.toLowerCase())
         )}
-        columns={columns}
-        loading={loading}
+                columns={columns}
+                loading={loading}
         emptyMessage="No asset categories found"
         showActions={false}
       />
@@ -478,5 +478,5 @@ export default function AssetCategoriesPage() {
         </DialogContent>
       </Dialog>
     </PageTemplate>
-  );
-}
+    );
+} 
