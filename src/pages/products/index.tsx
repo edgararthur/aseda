@@ -233,7 +233,7 @@ export default function ProductsPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.total || 0}</div>
+            <div className="text-xl font-bold">{stats?.total || 0}</div>
             <p className="text-xs text-muted-foreground">
               Products in catalog
             </p>
@@ -246,7 +246,7 @@ export default function ProductsPage() {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats?.active || 0}</div>
+            <div className="text-xl font-bold text-green-600">{stats?.active || 0}</div>
             <p className="text-xs text-muted-foreground">
               Available for sale
             </p>
@@ -259,7 +259,7 @@ export default function ProductsPage() {
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats?.lowStock || 0}</div>
+            <div className="text-xl font-bold text-yellow-600">{stats?.lowStock || 0}</div>
             <p className="text-xs text-muted-foreground">
               Need reordering
             </p>
@@ -272,7 +272,7 @@ export default function ProductsPage() {
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats?.outOfStock || 0}</div>
+            <div className="text-xl font-bold text-red-600">{stats?.outOfStock || 0}</div>
             <p className="text-xs text-muted-foreground">
               Urgent restock needed
             </p>
@@ -285,15 +285,15 @@ export default function ProductsPage() {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl font-bold">
               <CurrencyCell amount={stats?.totalValue || 0} />
-                                </div>
+            </div>
             <p className="text-xs text-muted-foreground">
               Total stock value
             </p>
           </CardContent>
         </Card>
-                            </div>
+      </div>
 
       {/* Products Table */}
       <DataTableTemplate

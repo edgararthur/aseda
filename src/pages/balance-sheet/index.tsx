@@ -252,7 +252,7 @@ export default function BalanceSheetPage() {
                 </p>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold">₵{balanceSheet.totals.totalAssetsValue.toLocaleString()}</div>
+                <div className="text-xl font-bold">₵{balanceSheet.totals.totalAssetsValue.toLocaleString()}</div>
                 <div className="text-sm text-muted-foreground">Total Assets</div>
               </div>
                         </div>
@@ -268,7 +268,7 @@ export default function BalanceSheetPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₵{balanceSheet.assets.totalAssets.toLocaleString()}</div>
+            <div className="text-xl font-bold">₵{balanceSheet.assets.totalAssets.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Current + Non-Current</p>
                     </CardContent>
                 </Card>
@@ -279,7 +279,7 @@ export default function BalanceSheetPage() {
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₵{balanceSheet.liabilities.totalLiabilities.toLocaleString()}</div>
+            <div className="text-xl font-bold">₵{balanceSheet.liabilities.totalLiabilities.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Debts and obligations</p>
                         </CardContent>
                     </Card>
@@ -290,7 +290,7 @@ export default function BalanceSheetPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₵{balanceSheet.equity.totalEquity.toLocaleString()}</div>
+            <div className="text-xl font-bold">₵{balanceSheet.equity.totalEquity.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Owner's investment</p>
           </CardContent>
         </Card>

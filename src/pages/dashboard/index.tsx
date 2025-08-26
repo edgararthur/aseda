@@ -250,11 +250,11 @@ export default function DashboardPage() {
       {/* Welcome Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gradient">
+          <h1 className="text-2xl font-bold text-gradient">
             Welcome back, {user?.full_name?.split(' ')[0] || 'User'}!
           </h1>
-          <p className="text-muted-foreground mt-1">
-            {currentTime.toLocaleDateString('en-US', { 
+          <p className="text-muted-foreground mt-1 text-sm">
+            {currentTime.toLocaleDateString('en-GH', { 
               weekday: 'long', 
               year: 'numeric', 
               month: 'long', 
@@ -270,7 +270,7 @@ export default function DashboardPage() {
             {profile?.role || 'Member'}
           </Badge>
         </div>
-            </div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -280,7 +280,7 @@ export default function DashboardPage() {
             <FileText className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalInvoices)}</div>
+            <div className="text-xl font-bold">{formatCurrency(stats.totalInvoices)}</div>
             <p className="text-xs text-muted-foreground">
               {stats.pendingInvoices} pending, {stats.overdueInvoices} overdue
             </p>
@@ -293,7 +293,7 @@ export default function DashboardPage() {
             <CreditCard className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalExpenses)}</div>
+            <div className="text-xl font-bold">{formatCurrency(stats.totalExpenses)}</div>
             <p className="text-xs text-muted-foreground">
               This month
             </p>
@@ -306,7 +306,7 @@ export default function DashboardPage() {
             <Users className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalPayroll)}</div>
+            <div className="text-xl font-bold">{formatCurrency(stats.totalPayroll)}</div>
             <p className="text-xs text-muted-foreground">
               {stats.totalEmployees} employees
             </p>
@@ -319,7 +319,7 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-xl font-bold text-green-600">
               {formatCurrency(stats.netProfit)}
             </div>
             <div className="flex items-center text-xs text-green-600">
@@ -335,7 +335,7 @@ export default function DashboardPage() {
             <PiggyBank className="h-4 w-4 text-indigo-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.cashFlow)}</div>
+            <div className="text-xl font-bold">{formatCurrency(stats.cashFlow)}</div>
             <p className="text-xs text-muted-foreground">
               Available balance
             </p>
@@ -346,11 +346,11 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Zap className="w-5 h-5" />
             Quick Actions
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-sm">
             Perform common tasks quickly
           </CardDescription>
         </CardHeader>
@@ -367,8 +367,8 @@ export default function DashboardPage() {
                   <action.icon className="w-5 h-5 text-white" />
                 </div>
                 <div className="text-left">
-                  <div className="font-medium">{action.title}</div>
-                  <div className="text-sm text-muted-foreground">{action.description}</div>
+                  <div className="font-medium text-sm">{action.title}</div>
+                  <div className="text-xs text-muted-foreground">{action.description}</div>
                 </div>
               </Button>
             ))}
@@ -380,8 +380,8 @@ export default function DashboardPage() {
       <Card className="flex-1">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Recent Transactions</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-lg">Recent Transactions</CardTitle>
+            <CardDescription className="text-sm">
               Latest financial activities
             </CardDescription>
           </div>
@@ -401,8 +401,8 @@ export default function DashboardPage() {
                       <Icon className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="font-medium">{transaction.description}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <p className="font-medium text-sm">{transaction.description}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>{transaction.category}</span>
                         <span>•</span>
                         <span>{formatDate(transaction.date)}</span>
@@ -410,7 +410,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`font-medium ${getTransactionColor(transaction.type)}`}>
+                    <p className={`font-medium text-sm ${getTransactionColor(transaction.type)}`}>
                       {transaction.type === 'expense' ? '-' : '+'}
                       {formatCurrency(transaction.amount)}
                     </p>

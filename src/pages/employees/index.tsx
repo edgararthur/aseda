@@ -285,7 +285,7 @@ export default function EmployeesPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.total || 0}</div>
+            <div className="text-xl font-bold">{stats?.total || 0}</div>
             <p className="text-xs text-muted-foreground">
               Total workforce
             </p>
@@ -298,7 +298,7 @@ export default function EmployeesPage() {
             <UserCheck className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats?.active || 0}</div>
+            <div className="text-xl font-bold text-green-600">{stats?.active || 0}</div>
             <p className="text-xs text-muted-foreground">
               Currently employed
             </p>
@@ -311,7 +311,7 @@ export default function EmployeesPage() {
             <UserX className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats?.inactive || 0}</div>
+            <div className="text-xl font-bold text-red-600">{stats?.inactive || 0}</div>
             <p className="text-xs text-muted-foreground">
               Not active
             </p>
@@ -324,7 +324,7 @@ export default function EmployeesPage() {
             <Clock className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats?.newHires || 0}</div>
+            <div className="text-xl font-bold text-blue-600">{stats?.newHires || 0}</div>
             <p className="text-xs text-muted-foreground">
               This quarter
             </p>
@@ -337,7 +337,7 @@ export default function EmployeesPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl font-bold">
               <CurrencyCell amount={stats?.totalSalary || 0} />
             </div>
             <p className="text-xs text-muted-foreground">

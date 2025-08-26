@@ -495,7 +495,7 @@ export default function InvoicesPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{localStats.total}</div>
+            <div className="text-xl font-bold">{localStats.total}</div>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(localStats.totalValue)}
             </p>
@@ -508,7 +508,7 @@ export default function InvoicesPage() {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{localStats.paid}</div>
+            <div className="text-xl font-bold text-green-600">{localStats.paid}</div>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(localStats.paidValue)}
             </p>
@@ -521,7 +521,7 @@ export default function InvoicesPage() {
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{localStats.overdue}</div>
+            <div className="text-xl font-bold text-red-600">{localStats.overdue}</div>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(localStats.overdueValue)}
             </p>
@@ -534,7 +534,7 @@ export default function InvoicesPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{localStats.draft}</div>
+            <div className="text-xl font-bold">{localStats.draft}</div>
             <p className="text-xs text-muted-foreground">
               Pending completion
             </p>

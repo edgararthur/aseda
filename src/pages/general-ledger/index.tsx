@@ -66,14 +66,14 @@ export default function GeneralLedgerPage() {
       // This is a simplified version - in a real system, you'd have journal entry lines
       ledgerEntries.push({
         id: entry.id,
-        date: entry.entry_date,
+        date: entry.date,
         account_code: 'ACC-001', // This would come from the account
         account_name: 'General Account', // This would come from the account
         description: entry.description,
         reference: entry.entry_number,
-        debit: entry.total_amount,
-        credit: 0,
-        balance: entry.total_amount,
+        debit: entry.total_debit,
+        credit: entry.total_credit,
+        balance: entry.total_debit - entry.total_credit,
         entry_type: 'journal',
         created_at: entry.created_at
       });
@@ -241,12 +241,10 @@ export default function GeneralLedgerPage() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-xl font-bold text-green-600">
               <CurrencyCell amount={stats.totalDebits} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              All debit entries
-            </p>
+            <p className="text-xs text-muted-foreground">Total Debits</p>
           </CardContent>
         </Card>
 
@@ -256,26 +254,24 @@ export default function GeneralLedgerPage() {
             <TrendingDown className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-xl font-bold text-red-600">
               <CurrencyCell amount={stats.totalCredits} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              All credit entries
-            </p>
+            <p className="text-xs text-muted-foreground">Total Credits</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              <CurrencyCell amount={stats.netBalance} />
+            <div className={`text-xl font-bold ${stats.netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <CurrencyCell amount={Math.abs(stats.netBalance)} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Debits - Credits
+              {stats.netBalance >= 0 ? 'Net Debit' : 'Net Credit'}
             </p>
           </CardContent>
         </Card>
@@ -286,10 +282,8 @@ export default function GeneralLedgerPage() {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.entriesCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Journal entries
-            </p>
+            <div className="text-xl font-bold">{stats.entriesCount}</div>
+            <p className="text-xs text-muted-foreground">Journal entries</p>
           </CardContent>
         </Card>
       </div>
