@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   DatabaseService,
   InvoiceService,
+  ExpenseService,
   ProductService,
   EmployeeService,
   ContactService,
@@ -614,5 +615,67 @@ export function useChartOfAccounts(options?: { realtime?: boolean }) {
     createAccount,
     getAccountsHierarchy,
     updateAccountBalance
+  };
+}
+
+// Hook for Expenses management
+export function useExpenses(options?: { realtime?: boolean }) {
+  const { profile } = useAuth();
+  const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  
+  const database = useDatabase('expenses', {
+    realtime: options?.realtime || true,
+    searchColumns: ['expense_number', 'description', 'category'],
+    autoFetch: true
+  });
+
+  const fetchStats = useCallback(async () => {
+    if (!profile?.organization_id) return;
+    
+    try {
+      setStatsLoading(true);
+      const result = await ExpenseService.getExpenseStats(profile.organization_id);
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      setStats(result.data);
+    } catch (err) {
+      ErrorHandler.showError(err, 'Failed to load expense statistics');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [profile?.organization_id]);
+
+  const createExpense = useCallback(async (expenseData: any) => {
+    if (!profile?.organization_id) {
+      throw ErrorHandler.createError('UNAUTHORIZED', 'No organization context');
+    }
+    
+    return ExpenseService.createExpense(expenseData, profile.organization_id);
+  }, [profile?.organization_id]);
+
+  const updateExpense = useCallback(async (id: string, expenseData: any) => {
+    return ExpenseService.updateExpense(id, expenseData);
+  }, []);
+
+  const deleteExpense = useCallback(async (id: string) => {
+    return ExpenseService.deleteExpense(id);
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  return {
+    ...database,
+    stats,
+    statsLoading,
+    createExpense,
+    updateExpense,
+    deleteExpense,
+    refreshStats: fetchStats
   };
 }

@@ -4,20 +4,7 @@ import { useInvoices, useContacts, useProducts } from '@/hooks/use-database';
 import { ErrorHandler } from '@/lib/error-handler';
 import type { Invoice, Contact, Product } from '@/lib/database';
 
-// Helper functions to map between UI and DB schemas
-const mapInvoiceFromDB = (dbInvoice: Invoice) => ({
-  ...dbInvoice,
-  invoice_number: dbInvoice.invoicenumber,
-  contact_id: dbInvoice.customerid,
-  issue_date: dbInvoice.date,
-  due_date: dbInvoice.duedate,
-  total_amount: dbInvoice.total,
-  tax_amount: dbInvoice.taxamount,
-  payment_terms: dbInvoice.terms,
-  line_items: Array.isArray(dbInvoice.items) ? dbInvoice.items as unknown as InvoiceLineItem[] : []
-});
-
-const mapInvoiceForDisplay = (invoice: Invoice) => mapInvoiceFromDB(invoice);
+// Invoice types are now aligned with database schema
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -224,7 +211,7 @@ export default function InvoicesPage() {
   const typedInvoices = (invoices as Invoice[]) || [];
   const filteredInvoices = typedInvoices.filter(invoice => {
     const matchesSearch = searchQuery === '' ||
-      invoice.invoicenumber.toLowerCase().includes(searchQuery.toLowerCase());
+      invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
 
@@ -237,9 +224,9 @@ export default function InvoicesPage() {
     paid: filteredInvoices.filter(inv => inv.status === 'paid').length,
     overdue: filteredInvoices.filter(inv => inv.status === 'overdue').length,
     draft: filteredInvoices.filter(inv => inv.status === 'draft').length,
-    totalValue: filteredInvoices.reduce((sum, inv) => sum + inv.total, 0),
-    paidValue: filteredInvoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + inv.total, 0),
-    overdueValue: filteredInvoices.filter(inv => inv.status === 'overdue').reduce((sum, inv) => sum + inv.total, 0)
+    totalValue: filteredInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0),
+    paidValue: filteredInvoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (inv.total_amount || 0), 0),
+    overdueValue: filteredInvoices.filter(inv => inv.status === 'overdue').reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
   };
 
   const handleCreateInvoice = async () => {
@@ -322,20 +309,19 @@ export default function InvoicesPage() {
   const handleEditInvoice = (invoice: Invoice) => {
     setCurrentInvoice(invoice);
     
-    // Populate form with invoice data using mapped fields
-    const mapped = mapInvoiceForDisplay(invoice);
+    // Populate form with invoice data
     setFormData({
-      invoice_number: mapped.invoice_number,
-      contact_id: mapped.contact_id || '',
-      issue_date: mapped.issue_date,
-      due_date: mapped.due_date,
+      invoice_number: invoice.invoice_number,
+      contact_id: invoice.contact_id || '',
+      issue_date: invoice.issue_date,
+      due_date: invoice.due_date,
       status: invoice.status as any,
       notes: invoice.notes || '',
-      line_items: Array.isArray(mapped.line_items) ? mapped.line_items as unknown as InvoiceLineItem[] : [],
-      subtotal: invoice.subtotal,
-      tax_amount: mapped.tax_amount,
-      total_amount: mapped.total_amount,
-      payment_terms: mapped.payment_terms || 'Net 30'
+      line_items: [], // TODO: Load invoice items from separate table
+      subtotal: invoice.subtotal || 0,
+      tax_amount: invoice.tax_amount || 0,
+      total_amount: invoice.total_amount || 0,
+      payment_terms: invoice.terms || 'Net 30'
     });
     
     setIsEditModalOpen(true);
@@ -347,7 +333,7 @@ export default function InvoicesPage() {
   };
 
   const handleDeleteInvoice = async (invoice: Invoice) => {
-          if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoicenumber}?`)) {
+          if (window.confirm(`Are you sure you want to delete invoice ${invoice.invoice_number}?`)) {
       try {
         setLoading(true);
         // TODO: Implement delete functionality in hook
@@ -591,13 +577,13 @@ export default function InvoicesPage() {
               </TableHeader>
               <TableBody>
                 {filteredInvoices.map((invoice) => {
-                  const customer = (contacts as Contact[])?.find(c => c.id === invoice.customerid);
-                  const isOverdue = new Date(invoice.duedate) < new Date() && invoice.status !== 'paid';
+                  const customer = (contacts as Contact[])?.find(c => c.id === invoice.contact_id);
+                  const isOverdue = new Date(invoice.due_date) < new Date() && invoice.status !== 'paid';
                   
                   return (
                     <TableRow key={invoice.id} className={isOverdue ? 'bg-red-50' : ''}>
                       <TableCell className="font-medium">
-                        {invoice.invoicenumber}
+                        {invoice.invoice_number}
                       </TableCell>
                       <TableCell>
                         <div>
@@ -605,11 +591,11 @@ export default function InvoicesPage() {
                           <div className="text-sm text-muted-foreground">{customer?.email}</div>
                         </div>
                       </TableCell>
-                      <TableCell>{formatCurrency(invoice.total)}</TableCell>
+                      <TableCell>{formatCurrency(invoice.total_amount || 0)}</TableCell>
                       <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                       <TableCell>
                         <div className={isOverdue ? 'text-red-600 font-medium' : ''}>
-                          {new Date(invoice.duedate).toLocaleDateString()}
+                          {new Date(invoice.due_date).toLocaleDateString()}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1044,7 +1030,7 @@ export default function InvoicesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Invoice Number</Label>
-                  <p className="font-medium">{currentInvoice.invoicenumber}</p>
+                  <p className="font-medium">{currentInvoice.invoice_number}</p>
                 </div>
                 <div>
                   <Label>Status</Label>
@@ -1052,19 +1038,19 @@ export default function InvoicesPage() {
                 </div>
                 <div>
                   <Label>Issue Date</Label>
-                  <p>{new Date(currentInvoice.date).toLocaleDateString()}</p>
+                  <p>{new Date(currentInvoice.issue_date).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <Label>Due Date</Label>
-                  <p>{new Date(currentInvoice.duedate).toLocaleDateString()}</p>
+                  <p>{new Date(currentInvoice.due_date).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <Label>Customer</Label>
-                  <p>{(contacts as Contact[])?.find(c => c.id === currentInvoice.customerid)?.name || 'Unknown Customer'}</p>
+                  <p>{(contacts as Contact[])?.find(c => c.id === currentInvoice.contact_id)?.name || 'Unknown Customer'}</p>
                 </div>
                 <div>
                   <Label>Total Amount</Label>
-                  <p className="text-lg font-bold">{formatCurrency(currentInvoice.total)}</p>
+                  <p className="text-lg font-bold">{formatCurrency(currentInvoice.total_amount || 0)}</p>
                 </div>
               </div>
 

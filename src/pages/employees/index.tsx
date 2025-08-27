@@ -42,14 +42,27 @@ export default function EmployeesPage() {
     refresh
   } = useEmployees({ realtime: true });
 
-  const { data: departments } = useDepartments({ realtime: true });
+  const { 
+    data: departments, 
+    createDepartment 
+  } = useDepartments({ realtime: true });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+
+  // Department form data
+  const [departmentFormData, setDepartmentFormData] = useState({
+    code: '',
+    name: '',
+    manager_id: '',
+    budget: 0,
+    status: 'active'
+  });
 
   // Form data matching database schema
   const [formData, setFormData] = useState({
@@ -240,6 +253,45 @@ export default function EmployeesPage() {
       toast.success('Employee updated successfully');
     } catch (error) {
       // Error is already handled by the hook
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  // Handle create department
+  const handleCreateDepartment = async () => {
+    try {
+      setModalLoading(true);
+      
+      if (!departmentFormData.name || !departmentFormData.code) {
+        toast.error('Please enter department name and code');
+        return;
+      }
+
+      const result = await createDepartment(departmentFormData);
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to create department');
+      }
+
+      setIsDepartmentModalOpen(false);
+      setDepartmentFormData({
+        code: '',
+        name: '',
+        manager_id: '',
+        budget: 0,
+        status: 'active'
+      });
+      toast.success('Department created successfully');
+      
+      // Auto-select the newly created department
+      if (result.data) {
+        setFormData(prev => ({ ...prev, department_id: result.data.id }));
+      }
+    } catch (error) {
+      console.error('Error creating department:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create department';
+      toast.error(errorMessage);
     } finally {
       setModalLoading(false);
     }
@@ -450,7 +502,19 @@ export default function EmployeesPage() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="department_id">Department</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="department_id">Department</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsDepartmentModalOpen(true)}
+                      className="text-xs"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add Department
+                    </Button>
+                  </div>
                   <Select
                     value={formData.department_id}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, department_id: value }))}
@@ -459,11 +523,17 @@ export default function EmployeesPage() {
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(departments as any[])?.map(dept => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
+                      {(departments as any[])?.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          No departments found. Click "Add Department" to create one.
+                        </div>
+                      ) : (
+                        (departments as any[])?.map(dept => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -700,7 +770,19 @@ export default function EmployeesPage() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="edit_department_id">Department</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="edit_department_id">Department</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsDepartmentModalOpen(true)}
+                      className="text-xs"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add Department
+                    </Button>
+                  </div>
                   <Select
                     value={formData.department_id}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, department_id: value }))}
@@ -709,11 +791,17 @@ export default function EmployeesPage() {
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(departments as any[])?.map(dept => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
+                      {(departments as any[])?.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          No departments found. Click "Add Department" to create one.
+                        </div>
+                      ) : (
+                        (departments as any[])?.map(dept => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -837,6 +925,79 @@ export default function EmployeesPage() {
               handleEdit(currentEmployee!);
             }}>
               Edit Employee
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Department Modal */}
+      <Dialog open={isDepartmentModalOpen} onOpenChange={setIsDepartmentModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Department</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="dept_name">Department Name *</Label>
+                <Input
+                  id="dept_name"
+                  value={departmentFormData.name}
+                  onChange={(e) => setDepartmentFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Human Resources"
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="dept_code">Department Code *</Label>
+                <Input
+                  id="dept_code"
+                  value={departmentFormData.code}
+                  onChange={(e) => setDepartmentFormData(prev => ({ ...prev, code: e.target.value }))}
+                  placeholder="HR"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="dept_budget">Budget (GHS)</Label>
+              <Input
+                id="dept_budget"
+                type="number"
+                min="0"
+                step="0.01"
+                value={departmentFormData.budget}
+                onChange={(e) => setDepartmentFormData(prev => ({ ...prev, budget: parseFloat(e.target.value) || 0 }))}
+                placeholder="50000.00"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsDepartmentModalOpen(false);
+                setDepartmentFormData({
+                  code: '',
+                  name: '',
+                  manager_id: '',
+                  budget: 0,
+                  status: 'active'
+                });
+              }} 
+              disabled={modalLoading}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateDepartment} 
+              disabled={modalLoading || !departmentFormData.name || !departmentFormData.code}
+            >
+              {modalLoading ? 'Creating...' : 'Create Department'}
             </Button>
           </DialogFooter>
         </DialogContent>

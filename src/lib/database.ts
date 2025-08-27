@@ -1,12 +1,36 @@
 import supabase from './supabase';
+import { formatCurrency } from './utils';
+import { offlineStorage } from './offline-storage';
 import type { Database } from '../types/supabase';
 import { ErrorHandler, withErrorHandling, Validator, type AppError } from './error-handler';
 import { toast } from 'sonner';
 
 // Type aliases for easier use
 type Tables = Database['public']['Tables'];
-type Invoice = Tables['invoices']['Row'];
 type Profile = Tables['profiles']['Row'];
+
+// Custom Invoice interface that matches the actual database schema
+interface Invoice {
+  id: string;
+  organization_id: string;
+  contact_id: string | null;
+  invoice_number: string;
+  issue_date: string;
+  due_date: string;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  currency: string;
+  exchange_rate: number;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled' | 'void';
+  notes: string | null;
+  terms: string | null;
+  created_by: string | null;
+  posted_at: string | null;
+  posted_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 // Enhanced types matching the new schema
 interface Product {
@@ -210,6 +234,81 @@ interface VATReturn {
   updated_at: string;
 }
 
+interface Expense {
+  id: string;
+  organization_id: string;
+  expense_number: string;
+  employee_id?: string;
+  category: 'travel' | 'meals' | 'office_supplies' | 'utilities' | 'rent' | 'marketing' | 'professional_services' | 'other';
+  description: string;
+  amount: number;
+  tax_amount: number;
+  total_amount: number;
+  expense_date: string;
+  payment_method: 'cash' | 'credit_card' | 'bank_transfer' | 'company_card';
+  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid' | 'reimbursed';
+  receipt_url?: string;
+  notes?: string;
+  approved_by?: string;
+  approved_date?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChartOfAccount {
+  id: string;
+  organization_id: string;
+  account_code: string;
+  account_name: string;
+  account_type: 'assets' | 'liabilities' | 'equity' | 'income' | 'expenses';
+  description?: string;
+  parent_id?: string;
+  status: string;
+  is_bank_account: boolean;
+  current_balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TrialBalanceAccount {
+  account_code: string;
+  account_name: string;
+  account_type: string;
+  debit_balance: number;
+  credit_balance: number;
+}
+
+interface BalanceSheetData {
+  assets: {
+    current_assets: ChartOfAccount[];
+    fixed_assets: ChartOfAccount[];
+    total_assets: number;
+  };
+  liabilities: {
+    current_liabilities: ChartOfAccount[];
+    long_term_liabilities: ChartOfAccount[];
+    total_liabilities: number;
+  };
+  equity: {
+    equity_accounts: ChartOfAccount[];
+    total_equity: number;
+  };
+  total_liabilities_equity: number;
+}
+
+interface IncomeStatementData {
+  income: {
+    revenue_accounts: ChartOfAccount[];
+    total_income: number;
+  };
+  expenses: {
+    expense_accounts: ChartOfAccount[];
+    total_expenses: number;
+  };
+  net_income: number;
+}
+
 // Enhanced service response type
 export interface ServiceResponse<T> {
   data: T | null;
@@ -231,7 +330,12 @@ export type {
   ProductCategory, 
   JournalEntry, 
   PayrollRecord, 
-  VATReturn 
+  VATReturn,
+  Expense,
+  ChartOfAccount,
+  TrialBalanceAccount,
+  BalanceSheetData,
+  IncomeStatementData
 };
 
 // Real-time subscription type
@@ -244,16 +348,22 @@ export class DatabaseService {
   // Generic CRUD operations with enhanced error handling
   static async getAll<T>(table: string, organizationId?: string): Promise<ServiceResponse<T[]>> {
     return withErrorHandling(async () => {
-      let query = supabase.from(table).select('*');
-      
-      // Add organization filter if provided
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId);
+      // If offline, read from IndexedDB/cache
+      if (!navigator.onLine) {
+        await offlineStorage.init();
+        const data = await (offlineStorage as any).getAll(table as any, organizationId);
+        return data as T[];
       }
-      
+
+      let query = supabase.from(table).select('*');
+      if (organizationId) query = query.eq('organization_id', organizationId);
+
       const { data, error } = await query.order('created_at', { ascending: false });
-      
       if (error) throw error;
+
+      // Save snapshot for offline use
+      await offlineStorage.init();
+      await offlineStorage.setCacheSnapshot(table, (organizationId || 'all') as any, data || []);
       return data as T[];
     }, `getAll ${table}`);
   }
@@ -286,6 +396,12 @@ export class DatabaseService {
       insertData.created_at = new Date().toISOString();
       insertData.updated_at = new Date().toISOString();
 
+      if (!navigator.onLine) {
+        await offlineStorage.init();
+        const queued = await offlineStorage.queueCreate(table, insertData);
+        return queued as T;
+      }
+
       const { data: result, error } = await supabase
         .from(table)
         .insert(insertData)
@@ -293,6 +409,10 @@ export class DatabaseService {
         .single();
       
       if (error) throw error;
+
+      // Update offline snapshot
+      await offlineStorage.init();
+      await offlineStorage.applyCacheMutation(table, 'create', result);
       return result as T;
     }, `create ${table}`);
   }
@@ -306,6 +426,12 @@ export class DatabaseService {
       // Add updated timestamp
       const updateData = { ...data, updated_at: new Date().toISOString() };
 
+      if (!navigator.onLine) {
+        await offlineStorage.init();
+        const queued = await offlineStorage.queueUpdate(table, id, updateData);
+        return queued as T;
+      }
+
       const { data: result, error } = await supabase
         .from(table)
         .update(updateData)
@@ -314,6 +440,9 @@ export class DatabaseService {
         .single();
       
       if (error) throw error;
+
+      await offlineStorage.init();
+      await offlineStorage.applyCacheMutation(table, 'update', result);
       return result as T;
     }, `update ${table}`);
   }
@@ -324,12 +453,21 @@ export class DatabaseService {
       const idValidation = Validator.required(id, 'ID');
       if (idValidation) throw idValidation;
 
+      if (!navigator.onLine) {
+        await offlineStorage.init();
+        await offlineStorage.queueDelete(table, id);
+        return true;
+      }
+
       const { error } = await supabase
         .from(table)
         .delete()
         .eq('id', id);
       
       if (error) throw error;
+
+      await offlineStorage.init();
+      await offlineStorage.applyCacheMutation(table, 'delete', { id });
       return true;
     }, `delete ${table}`);
   }
@@ -459,16 +597,14 @@ export class InvoiceService {
       const stats = {
         total: invoices?.length || 0,
         paid: invoices?.filter(inv => inv.status === 'paid').length || 0,
-        pending: invoices?.filter(inv => inv.status === 'sent').length || 0,
+        draft: invoices?.filter(inv => inv.status === 'draft').length || 0,
         overdue: invoices?.filter(inv => 
           inv.status !== 'paid' && inv.due_date && new Date(inv.due_date) < now
         ).length || 0,
-        totalAmount: invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0,
-        paidAmount: invoices?.filter(inv => inv.status === 'paid')
+        totalValue: invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0,
+        paidValue: invoices?.filter(inv => inv.status === 'paid')
           .reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0,
-        pendingAmount: invoices?.filter(inv => inv.status === 'sent')
-          .reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0,
-        overdueAmount: invoices?.filter(inv => 
+        overdueValue: invoices?.filter(inv => 
           inv.status !== 'paid' && inv.due_date && new Date(inv.due_date) < now
         ).reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0,
       };
@@ -479,46 +615,30 @@ export class InvoiceService {
 
   static async createInvoice(invoiceData: any, organizationId: string): Promise<ServiceResponse<Invoice>> {
     return withErrorHandling(async () => {
-      // Get contact information if contact_id is provided
-      let clientName = invoiceData.client_name;
-      let clientEmail = invoiceData.client_email;
-      
-      if (invoiceData.contact_id && !clientName) {
-        const { data: contact } = await supabase
-          .from('contacts')
-          .select('name, email')
-          .eq('id', invoiceData.contact_id)
-          .single();
-        
-        if (contact) {
-          clientName = contact.name;
-          clientEmail = contact.email;
-        }
-      }
-
-      // Prepare invoice data for database (mapping to actual DB schema)
+      // Prepare invoice data for database (using actual DB schema)
       const dbInvoiceData = {
-        invoicenumber: invoiceData.invoice_number,
-        customerid: invoiceData.contact_id || null,
-        date: invoiceData.issue_date,
-        duedate: invoiceData.due_date,
+        organization_id: organizationId,
+        contact_id: invoiceData.contact_id || null,
+        invoice_number: invoiceData.invoice_number,
+        issue_date: invoiceData.issue_date,
+        due_date: invoiceData.due_date,
         status: invoiceData.status || 'draft',
-        total: invoiceData.total_amount,
-        subtotal: invoiceData.subtotal || invoiceData.total_amount - (invoiceData.tax_amount || 0),
-        taxamount: invoiceData.tax_amount || 0,
+        subtotal: invoiceData.subtotal || 0,
+        tax_amount: invoiceData.tax_amount || 0,
+        total_amount: invoiceData.total_amount,
+        currency: invoiceData.currency || 'GHS',
         notes: invoiceData.notes,
-        terms: invoiceData.payment_terms,
-        items: invoiceData.line_items || []
+        terms: invoiceData.payment_terms
       };
 
       // Validate required fields
       const validations = [
-        () => Validator.required(dbInvoiceData.invoicenumber, 'Invoice Number'),
-        () => Validator.required(dbInvoiceData.customerid, 'Customer'),
-        () => Validator.required(dbInvoiceData.date, 'Issue Date'),
-        () => Validator.required(dbInvoiceData.duedate, 'Due Date'),
-        () => Validator.positiveNumber(dbInvoiceData.total, 'Total Amount'),
-        () => Validator.dateRange(new Date(dbInvoiceData.date), new Date(dbInvoiceData.duedate))
+        () => Validator.required(dbInvoiceData.invoice_number, 'Invoice Number'),
+        () => Validator.required(dbInvoiceData.contact_id, 'Customer'),
+        () => Validator.required(dbInvoiceData.issue_date, 'Issue Date'),
+        () => Validator.required(dbInvoiceData.due_date, 'Due Date'),
+        () => Validator.positiveNumber(dbInvoiceData.total_amount, 'Total Amount'),
+        () => Validator.dateRange(new Date(dbInvoiceData.issue_date), new Date(dbInvoiceData.due_date))
       ];
 
       const errors = Validator.validateForm(validations);
@@ -530,7 +650,8 @@ export class InvoiceService {
       const { data: existing } = await supabase
         .from('invoices')
         .select('id')
-        .eq('invoicenumber', dbInvoiceData.invoicenumber)
+        .eq('invoice_number', dbInvoiceData.invoice_number)
+        .eq('organization_id', organizationId)
         .single();
 
       if (existing) {
@@ -546,7 +667,24 @@ export class InvoiceService {
 
       if (invoiceError) throw invoiceError;
 
-      // Line items are stored as JSON in the items column, no separate table needed
+      // Create invoice line items if provided
+      if (invoiceData.line_items && invoiceData.line_items.length > 0) {
+        const lineItems = invoiceData.line_items.map((item: any) => ({
+          invoice_id: invoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate || 0,
+          tax_amount: (item.unit_price * item.quantity * (item.tax_rate || 0)) / 100,
+          total_amount: item.line_total || (item.unit_price * item.quantity)
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(lineItems);
+
+        if (itemsError) throw itemsError;
+      }
       
       return invoice;
     }, 'createInvoice');
@@ -618,23 +756,23 @@ export class ProductService {
 
       const { data: products, error } = await supabase
         .from('products')
-        .select('status, quantity_in_stock, reorder_level, unit_price, cost_price')
+        .select('is_active, quantity_on_hand, reorder_point, sales_price, purchase_price')
         .eq('organization_id', organizationId);
 
       if (error) throw error;
 
       const stats = {
         total: products?.length || 0,
-        active: products?.filter(p => p.status === 'active').length || 0,
+        active: products?.filter(p => p.is_active === true).length || 0,
         lowStock: products?.filter(p => 
-          p.quantity_in_stock <= p.reorder_level && p.quantity_in_stock > 0
+          p.quantity_on_hand <= p.reorder_point && p.quantity_on_hand > 0
         ).length || 0,
-        outOfStock: products?.filter(p => p.quantity_in_stock === 0).length || 0,
+        outOfStock: products?.filter(p => p.quantity_on_hand === 0).length || 0,
         totalValue: products?.reduce((sum, p) => 
-          sum + (p.unit_price * p.quantity_in_stock), 0
+          sum + (p.sales_price * p.quantity_on_hand), 0
         ) || 0,
         totalCost: products?.reduce((sum, p) => 
-          sum + (p.cost_price * p.quantity_in_stock), 0
+          sum + (p.purchase_price * p.quantity_on_hand), 0
         ) || 0,
       };
 
@@ -648,10 +786,10 @@ export class ProductService {
       const validations = [
         () => Validator.required(productData.name, 'Product Name'),
         () => Validator.required(productData.sku, 'SKU'),
-        () => Validator.positiveNumber(productData.unit_price, 'Unit Price'),
-        () => Validator.positiveNumber(productData.cost_price, 'Cost Price'),
-        () => Validator.number(productData.quantity_in_stock, 'Quantity in Stock'),
-        () => Validator.number(productData.reorder_level, 'Reorder Level')
+        () => Validator.positiveNumber(productData.sales_price, 'Sales Price'),
+        () => Validator.positiveNumber(productData.purchase_price, 'Purchase Price'),
+        () => Validator.number(productData.quantity_on_hand, 'Quantity on Hand'),
+        () => Validator.number(productData.reorder_point, 'Reorder Point')
       ];
 
       const errors = Validator.validateForm(validations);
@@ -689,14 +827,14 @@ export class ProductService {
         throw ErrorHandler.createError('RECORD_NOT_FOUND', 'Product not found');
       }
 
-      const newQuantity = existing.data.quantity_in_stock + quantity;
+      const newQuantity = existing.data.quantity_on_hand + quantity;
       if (newQuantity < 0) {
         throw ErrorHandler.createError('INSUFFICIENT_STOCK', 'Insufficient stock for this operation');
       }
 
       const result = await DatabaseService.update<Product>('products', id, {
-        quantity_in_stock: newQuantity,
-        last_updated: new Date().toISOString()
+        quantity_on_hand: newQuantity,
+        updated_at: new Date().toISOString()
       });
 
       if (result.error) throw result.error;
@@ -1081,6 +1219,173 @@ export class VATReturnService {
   }
 }
 
+export class ExpenseService {
+  static async getExpenses(organizationId: string): Promise<ServiceResponse<Expense[]>> {
+    const orgValidation = Validator.required(organizationId, 'Organization ID');
+    if (orgValidation) {
+      return { data: null, error: orgValidation };
+    }
+    return DatabaseService.getAll<Expense>('expenses', organizationId);
+  }
+
+  static async getExpenseStats(organizationId: string) {
+    return withErrorHandling(async () => {
+      const orgValidation = Validator.required(organizationId, 'Organization ID');
+      if (orgValidation) throw orgValidation;
+
+      const { data: expenses, error } = await supabase
+        .from('expenses')
+        .select('status, total_amount, expense_date')
+        .eq('organization_id', organizationId);
+
+      if (error) throw error;
+
+      const now = new Date();
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+      const stats = {
+        total: expenses?.length || 0,
+        thisMonth: expenses?.filter(exp => new Date(exp.expense_date) >= thisMonth).length || 0,
+        lastMonth: expenses?.filter(exp => {
+          const expDate = new Date(exp.expense_date);
+          return expDate >= lastMonth && expDate < thisMonth;
+        }).length || 0,
+        pending: expenses?.filter(exp => exp.status === 'submitted').length || 0,
+        approved: expenses?.filter(exp => exp.status === 'approved').length || 0,
+        totalAmount: expenses?.reduce((sum, exp) => sum + (exp.total_amount || 0), 0) || 0,
+        thisMonthAmount: expenses?.filter(exp => new Date(exp.expense_date) >= thisMonth)
+          .reduce((sum, exp) => sum + (exp.total_amount || 0), 0) || 0,
+        averageExpense: expenses?.length > 0 
+          ? (expenses.reduce((sum, exp) => sum + (exp.total_amount || 0), 0) / expenses.length) 
+          : 0,
+        monthlyGrowth: 0 // Calculate based on last month vs this month
+      };
+
+      // Calculate monthly growth
+      const lastMonthAmount = expenses?.filter(exp => {
+        const expDate = new Date(exp.expense_date);
+        return expDate >= lastMonth && expDate < thisMonth;
+      }).reduce((sum, exp) => sum + (exp.total_amount || 0), 0) || 0;
+
+      if (lastMonthAmount > 0) {
+        stats.monthlyGrowth = ((stats.thisMonthAmount - lastMonthAmount) / lastMonthAmount) * 100;
+      }
+
+      return stats;
+    }, 'getExpenseStats');
+  }
+
+  static async createExpense(expenseData: any, organizationId: string): Promise<ServiceResponse<Expense>> {
+    return withErrorHandling(async () => {
+      // Prepare expense data for database
+      const dbExpenseData = {
+        organization_id: organizationId,
+        expense_number: expenseData.expense_number,
+        employee_id: expenseData.employee_id || null,
+        category: expenseData.category,
+        description: expenseData.description,
+        amount: expenseData.amount,
+        tax_amount: expenseData.tax_amount || 0,
+        total_amount: expenseData.amount + (expenseData.tax_amount || 0),
+        expense_date: expenseData.expense_date,
+        payment_method: expenseData.payment_method || 'cash',
+        status: expenseData.status || 'draft',
+        receipt_url: expenseData.receipt_url,
+        notes: expenseData.notes,
+        created_by: expenseData.created_by
+      };
+
+      // Validate required fields
+      const validations = [
+        () => Validator.required(dbExpenseData.expense_number, 'Expense Number'),
+        () => Validator.required(dbExpenseData.description, 'Description'),
+        () => Validator.positiveNumber(dbExpenseData.amount, 'Amount'),
+        () => Validator.required(dbExpenseData.expense_date, 'Expense Date')
+      ];
+
+      const errors = Validator.validateForm(validations);
+      if (errors.length > 0) {
+        throw errors[0];
+      }
+
+      // Check for duplicate expense number
+      const { data: existing } = await supabase
+        .from('expenses')
+        .select('id')
+        .eq('expense_number', dbExpenseData.expense_number)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (existing) {
+        throw ErrorHandler.createError('DUPLICATE_RECORD', 'An expense with this number already exists');
+      }
+
+      // Create the expense
+      const { data: expense, error: expenseError } = await supabase
+        .from('expenses')
+        .insert([dbExpenseData])
+        .select()
+        .single();
+
+      if (expenseError) throw expenseError;
+      
+      return expense;
+    }, 'createExpense');
+  }
+
+  static async updateExpense(id: string, expenseData: any): Promise<ServiceResponse<Expense>> {
+    return withErrorHandling(async () => {
+      // Validate expense exists
+      const existing = await DatabaseService.getById<Expense>('expenses', id);
+      if (existing.error || !existing.data) {
+        throw ErrorHandler.createError('RECORD_NOT_FOUND', 'Expense not found');
+      }
+
+      // Validate fields if provided
+      if (expenseData.amount !== undefined) {
+        const amountValidation = Validator.positiveNumber(expenseData.amount, 'Amount');
+        if (amountValidation) throw amountValidation;
+      }
+
+      // Recalculate total if amount or tax changes
+      if (expenseData.amount !== undefined || expenseData.tax_amount !== undefined) {
+        const amount = expenseData.amount !== undefined ? expenseData.amount : existing.data.amount;
+        const taxAmount = expenseData.tax_amount !== undefined ? expenseData.tax_amount : existing.data.tax_amount;
+        expenseData.total_amount = amount + taxAmount;
+      }
+
+      const result = await DatabaseService.update<Expense>('expenses', id, expenseData);
+      if (result.error) throw result.error;
+      
+      return result.data!;
+    }, 'updateExpense');
+  }
+
+  static async deleteExpense(id: string): Promise<ServiceResponse<boolean>> {
+    return withErrorHandling(async () => {
+      // Check if expense can be deleted (not paid/reimbursed)
+      const existing = await DatabaseService.getById<Expense>('expenses', id);
+      if (existing.error || !existing.data) {
+        throw ErrorHandler.createError('RECORD_NOT_FOUND', 'Expense not found');
+      }
+
+      if (['paid', 'reimbursed'].includes(existing.data.status)) {
+        throw ErrorHandler.createError('CONSTRAINT_VIOLATION', 'Cannot delete paid or reimbursed expenses');
+      }
+
+      const result = await DatabaseService.delete('expenses', id);
+      if (result.error) throw result.error;
+      
+      return true;
+    }, 'deleteExpense');
+  }
+
+  static subscribeToExpenses(organizationId: string, callback: (payload: any) => void): RealtimeSubscription {
+    return DatabaseService.subscribeToTable('expenses', callback, organizationId);
+  }
+}
+
 export class ChartOfAccountsService {
   static async getAccounts(organizationId: string): Promise<ServiceResponse<ChartOfAccount[]>> {
     const orgValidation = Validator.required(organizationId, 'Organization ID');
@@ -1230,7 +1535,7 @@ export class FinancialReportsService {
         `)
         .eq('journal_entries.organization_id', organizationId)
         .eq('journal_entries.status', 'posted')
-        .lte('journal_entries.date', format(asOfDate, 'yyyy-MM-dd'));
+        .lte('journal_entries.date', asOfDate.toISOString().split('T')[0]);
 
       if (journalError) throw journalError;
 
@@ -1349,8 +1654,8 @@ export class FinancialReportsService {
         `)
         .eq('journal_entries.organization_id', organizationId)
         .eq('journal_entries.status', 'posted')
-        .gte('journal_entries.date', format(startDate, 'yyyy-MM-dd'))
-        .lte('journal_entries.date', format(endDate, 'yyyy-MM-dd'))
+        .gte('journal_entries.date', startDate.toISOString().split('T')[0])
+        .lte('journal_entries.date', endDate.toISOString().split('T')[0])
         .in('chart_of_accounts.account_type', ['revenue', 'expense']);
 
       if (journalError) throw journalError;

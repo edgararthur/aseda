@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import supabase from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useExpenses, useEmployees } from '@/hooks/use-database';
+import type { Expense, Employee } from '@/lib/database';
 import { toast } from 'sonner';
 import { 
   CreditCard, 
@@ -33,26 +34,7 @@ import {
   Users
 } from 'lucide-react';
 
-interface Expense {
-    id: string;
-  expense_number: string;
-  employee_name: string;
-  employee_id: string;
-  category: 'travel' | 'meals' | 'office_supplies' | 'utilities' | 'rent' | 'marketing' | 'professional_services' | 'other';
-    description: string;
-    amount: number;
-    tax_amount: number;
-  total_amount: number;
-  expense_date: string;
-  payment_method: 'cash' | 'credit_card' | 'bank_transfer' | 'company_card';
-  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid' | 'reimbursed';
-  receipt_url?: string;
-  notes?: string;
-  approved_by?: string;
-  approved_date?: string;
-    created_at: string;
-  updated_at: string;
-}
+// Using Expense interface from database.ts
 
 interface ExpenseStats {
   total: number;
@@ -67,20 +49,23 @@ interface ExpenseStats {
 }
 
 export default function ExpensesPage() {
-  const { user, profile } = useAuth();
-    const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [stats, setStats] = useState<ExpenseStats>({
-    total: 0,
-    thisMonth: 0,
-    lastMonth: 0,
-    pending: 0,
-    approved: 0,
-    totalAmount: 0,
-    thisMonthAmount: 0,
-    averageExpense: 0,
-    monthlyGrowth: 0
-  });
-    const [loading, setLoading] = useState(true);
+  const { user, profile, hasPermission } = useAuth();
+  const {
+    data: expenses,
+    loading,
+    error,
+    stats,
+    createExpense,
+    updateExpense,
+    deleteExpense,
+    searchData,
+    refresh
+  } = useExpenses({ realtime: true });
+
+  const {
+    data: employees,
+    loading: employeesLoading
+  } = useEmployees({ realtime: true });
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -95,16 +80,16 @@ export default function ExpensesPage() {
   // Form data
   const [formData, setFormData] = useState({
     expense_number: '',
-    employee_name: '',
     employee_id: '',
     category: 'other' as Expense['category'],
     description: '',
     amount: 0,
     tax_amount: 0,
     expense_date: new Date().toISOString().split('T')[0],
+    payment_method: 'cash' as Expense['payment_method'],
     receipt_url: '',
     notes: '',
-    status: 'pending' as Expense['status']
+    status: 'draft' as Expense['status']
   });
 
   const getCategoryIcon = (category: string) => {
@@ -129,14 +114,17 @@ export default function ExpensesPage() {
       )
     },
     {
-      key: 'employee_name',
+      key: 'employee_id',
       label: 'Employee',
-      render: (value, row) => (
+      render: (value, row) => {
+        const employee = (employees as Employee[])?.find(emp => emp.id === value);
+        return (
         <div>
-          <div className="font-medium">{value}</div>
-          <div className="text-sm text-gray-500">ID: {row.employee_id}</div>
+            <div className="font-medium">{employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown Employee'}</div>
+            <div className="text-sm text-gray-500">{employee?.employee_number || 'N/A'}</div>
         </div>
-      )
+        );
+      }
     },
     {
       key: 'category',
@@ -194,174 +182,133 @@ export default function ExpensesPage() {
     }
   ];
 
-  useEffect(() => {
-    fetchExpenses();
-    fetchStats();
-  }, [profile, categoryFilter, statusFilter]);
+  if (loading || employeesLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
+          <p className="text-muted-foreground">Loading expenses...</p>
+        </div>
+      </div>
+    );
+  }
 
-    const fetchExpenses = async () => {
-        try {
-            setLoading(true);
-      
-      // Mock data for now - replace with actual Supabase query
-      const mockExpenses: Expense[] = [
-        {
-          id: '1',
-          expense_number: 'EXP-2024-001',
-          employee_name: 'Kofi Asante',
-          employee_id: 'EMP-001',
-          category: 'travel',
-          description: 'Client meeting in Kumasi - fuel and toll',
-          amount: 350.00,
-          tax_amount: 0,
-          total_amount: 350.00,
-          expense_date: '2024-01-15',
-          payment_method: 'company_card',
-          status: 'approved',
-          receipt_url: '/receipts/exp-001.pdf',
-          notes: 'Business trip approved by manager',
-          approved_by: 'Manager',
-          approved_date: '2024-01-16',
-          created_at: '2024-01-15T10:00:00Z',
-          updated_at: '2024-01-16T10:00:00Z'
-        },
-        {
-          id: '2',
-          expense_number: 'EXP-2024-002',
-          employee_name: 'Ama Osei',
-          employee_id: 'EMP-002',
-          category: 'meals',
-          description: 'Team lunch with potential client',
-          amount: 180.00,
-          tax_amount: 27.00,
-          total_amount: 207.00,
-          expense_date: '2024-01-18',
-          payment_method: 'credit_card',
-          status: 'submitted',
-          receipt_url: '/receipts/exp-002.pdf',
-          notes: 'Client meeting meal expense',
-          created_at: '2024-01-18T10:00:00Z',
-          updated_at: '2024-01-18T10:00:00Z'
-        },
-        {
-          id: '3',
-          expense_number: 'EXP-2024-003',
-          employee_name: 'Kwame Mensah',
-          employee_id: 'EMP-003',
-          category: 'office_supplies',
-          description: 'Printer paper and toner cartridges',
-          amount: 125.00,
-          tax_amount: 18.75,
-          total_amount: 143.75,
-          expense_date: '2024-01-20',
-          payment_method: 'cash',
-          status: 'paid',
-          receipt_url: '/receipts/exp-003.pdf',
-          approved_by: 'Admin',
-          approved_date: '2024-01-21',
-          created_at: '2024-01-20T10:00:00Z',
-          updated_at: '2024-01-22T10:00:00Z'
-        },
-        {
-          id: '4',
-          expense_number: 'EXP-2024-004',
-          employee_name: 'Akosua Boateng',
-          employee_id: 'EMP-004',
-          category: 'professional_services',
-          description: 'Legal consultation for contract review',
-          amount: 800.00,
-          tax_amount: 120.00,
-          total_amount: 920.00,
-          expense_date: '2024-01-25',
-          payment_method: 'bank_transfer',
-          status: 'approved',
-          receipt_url: '/receipts/exp-004.pdf',
-          notes: 'Contract review for new client',
-          approved_by: 'CEO',
-          approved_date: '2024-01-26',
-          created_at: '2024-01-25T10:00:00Z',
-          updated_at: '2024-01-26T10:00:00Z'
-        },
-        {
-          id: '5',
-          expense_number: 'EXP-2024-005',
-          employee_name: 'Yaw Osei',
-          employee_id: 'EMP-005',
-          category: 'utilities',
-          description: 'Office internet and phone bills',
-          amount: 450.00,
-          tax_amount: 67.50,
-          total_amount: 517.50,
-          expense_date: '2024-01-28',
-          payment_method: 'bank_transfer',
-          status: 'draft',
-          notes: 'Monthly utility bills',
-          created_at: '2024-01-28T10:00:00Z',
-          updated_at: '2024-01-28T10:00:00Z'
-        }
-      ];
+  // Generate next expense number
+  const generateExpenseNumber = () => {
+    const currentYear = new Date().getFullYear();
+    const expenseCount = (expenses as Expense[])?.length || 0;
+    return `EXP-${currentYear}-${String(expenseCount + 1).padStart(4, '0')}`;
+  };
 
-      // Filter by category and status
-      let filteredExpenses = mockExpenses;
-      if (categoryFilter !== 'all') {
-        filteredExpenses = filteredExpenses.filter(exp => exp.category === categoryFilter);
-      }
-      if (statusFilter !== 'all') {
-        filteredExpenses = filteredExpenses.filter(exp => exp.status === statusFilter);
-      }
-
-      setExpenses(filteredExpenses);
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-      toast.error('Failed to load expenses');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-  const fetchStats = async () => {
+  // Handle create expense
+  const handleCreateExpense = async () => {
     try {
-      // Calculate stats from expenses
-      const mockStats: ExpenseStats = {
-        total: 5,
-        thisMonth: 5,
-        lastMonth: 3,
-        pending: 1,
-        approved: 2,
-        totalAmount: 2138.25,
-        thisMonthAmount: 2138.25,
-        averageExpense: 427.65,
-        monthlyGrowth: 66.7 // 66.7% growth from last month
+      setModalLoading(true);
+      
+      // Validation
+      if (!formData.description) {
+        toast.error('Please enter a description');
+        return;
+      }
+
+      if (formData.amount <= 0) {
+        toast.error('Amount must be greater than 0');
+        return;
+      }
+
+      // Prepare expense data
+      const expenseData = {
+        expense_number: formData.expense_number || generateExpenseNumber(),
+        employee_id: formData.employee_id || null,
+        category: formData.category,
+        description: formData.description,
+        amount: formData.amount,
+        tax_amount: formData.tax_amount,
+        expense_date: formData.expense_date,
+        payment_method: formData.payment_method,
+        status: formData.status,
+        receipt_url: formData.receipt_url,
+        notes: formData.notes,
+        created_by: profile?.id
       };
 
-      setStats(mockStats);
+      const result = await createExpense(expenseData);
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to create expense');
+      }
+
+      setIsCreateModalOpen(false);
+      resetForm();
+      toast.success('Expense created successfully');
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Error creating expense:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create expense';
+      toast.error(errorMessage);
+        } finally {
+      setModalLoading(false);
     }
   };
 
-  // Reset form
+  // Handle save edit
+  const handleSaveEdit = async () => {
+    if (!currentExpense) return;
+    
+    try {
+      setModalLoading(true);
+      
+      // Validation
+      if (!formData.description) {
+        toast.error('Please enter a description');
+        return;
+      }
+
+      if (formData.amount <= 0) {
+        toast.error('Amount must be greater than 0');
+        return;
+      }
+
+      const result = await updateExpense(currentExpense.id, formData);
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to update expense');
+      }
+
+      setIsEditModalOpen(false);
+      resetForm();
+      toast.success('Expense updated successfully');
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update expense';
+      toast.error(errorMessage);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleApprove = (expense: Expense) => {
+    toast.success(`Expense ${expense.expense_number} approved!`);
+  };
+
+  const handleReject = (expense: Expense) => {
+    toast.error(`Expense ${expense.expense_number} rejected!`);
+  };
+
   const resetForm = () => {
     setFormData({
       expense_number: '',
-      employee_name: '',
       employee_id: '',
       category: 'other',
       description: '',
       amount: 0,
       tax_amount: 0,
       expense_date: new Date().toISOString().split('T')[0],
+      payment_method: 'cash',
       receipt_url: '',
       notes: '',
-      status: 'pending'
+      status: 'draft'
     });
     setCurrentExpense(null);
-  };
-
-  // Generate expense number
-  const generateExpenseNumber = () => {
-    const count = expenses.length || 0;
-    return `EXP-${String(count + 1).padStart(4, '0')}`;
   };
 
   const handleAdd = () => {
@@ -370,7 +317,6 @@ export default function ExpensesPage() {
       return;
     }
     resetForm();
-    setFormData(prev => ({ ...prev, expense_number: generateExpenseNumber() }));
     setIsCreateModalOpen(true);
   };
 
@@ -382,13 +328,13 @@ export default function ExpensesPage() {
     setCurrentExpense(expense);
     setFormData({
       expense_number: expense.expense_number,
-      employee_name: expense.employee_name,
-      employee_id: expense.employee_id,
+      employee_id: expense.employee_id || '',
       category: expense.category,
       description: expense.description,
       amount: expense.amount,
       tax_amount: expense.tax_amount,
       expense_date: expense.expense_date,
+      payment_method: expense.payment_method,
       receipt_url: expense.receipt_url || '',
       notes: expense.notes || '',
       status: expense.status
@@ -409,81 +355,42 @@ export default function ExpensesPage() {
 
     if (window.confirm(`Are you sure you want to delete expense ${expense.expense_number}?`)) {
       try {
-        // Remove from local state (since using mock data)
-        setExpenses(prev => prev.filter(e => e.id !== expense.id));
+        const result = await deleteExpense(expense.id);
+        
+        if (result.error) {
+          throw new Error(result.error.message || 'Failed to delete expense');
+        }
+
             toast.success('Expense deleted successfully');
       } catch (error) {
         console.error('Error deleting expense:', error);
-            toast.error('Failed to delete expense');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete expense';
+        toast.error(errorMessage);
       }
     }
   };
 
-  // Handle create expense
-  const handleCreateExpense = async () => {
-    try {
-      setModalLoading(true);
-      
-      // Create new expense object
-      const newExpense: Expense = {
-        id: Date.now().toString(),
-        ...formData,
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      // Add to local state (since using mock data)
-      setExpenses(prev => [newExpense, ...prev]);
-      setIsCreateModalOpen(false);
-      resetForm();
-      toast.success('Expense created successfully');
-    } catch (error) {
-      console.error('Error creating expense:', error);
-      toast.error('Failed to create expense');
-    } finally {
-      setModalLoading(false);
+  // Handle search
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      searchData(searchQuery);
+    } else {
+      refresh();
     }
-  };
+  }, [searchQuery, searchData, refresh]);
 
-  // Handle save edit
-  const handleSaveEdit = async () => {
-    if (!currentExpense) return;
-    
-    try {
-      setModalLoading(true);
-      
-      // Update expense in local state
-      const updatedExpense = {
-        ...currentExpense,
-        ...formData,
-        updated_at: new Date().toISOString()
-      };
+  // Filter expenses
+  const typedExpenses = (expenses as Expense[]) || [];
+  const filteredExpenses = typedExpenses.filter(expense => {
+    const matchesSearch = searchQuery === '' ||
+      expense.expense_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      expense.description.toLowerCase().includes(searchQuery.toLowerCase());
 
-      setExpenses(prev => prev.map(e => e.id === currentExpense.id ? updatedExpense : e));
-      setIsEditModalOpen(false);
-      resetForm();
-      toast.success('Expense updated successfully');
-    } catch (error) {
-      console.error('Error updating expense:', error);
-      toast.error('Failed to update expense');
-    } finally {
-      setModalLoading(false);
-    }
-  };
+    const matchesCategory = categoryFilter === 'all' || expense.category === categoryFilter;
+    const matchesStatus = statusFilter === 'all' || expense.status === statusFilter;
 
-  const handleApprove = (expense: Expense) => {
-    toast.success(`Expense ${expense.expense_number} approved!`);
-  };
-
-  const handleReject = (expense: Expense) => {
-    toast.error(`Expense ${expense.expense_number} rejected!`);
-  };
-
-  const filteredExpenses = expenses.filter(expense =>
-    expense.expense_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    expense.employee_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    expense.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
 
   return (
     <PageTemplate
@@ -624,14 +531,22 @@ export default function ExpensesPage() {
               </div>
               
               <div>
-                <Label htmlFor="employee_name">Employee Name *</Label>
-                <Input
-                  id="employee_name"
-                  value={formData.employee_name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, employee_name: e.target.value }))}
-                  placeholder="John Doe"
-                  required
-                />
+                <Label htmlFor="employee_id">Employee *</Label>
+                <Select
+                  value={formData.employee_id}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, employee_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(employees as Employee[])?.map(employee => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.first_name} {employee.last_name} - {employee.employee_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
@@ -682,9 +597,9 @@ export default function ExpensesPage() {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="amount">Amount (GHS)</Label>
+                <Label htmlFor="amount">Amount (GHS) *</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -693,6 +608,7 @@ export default function ExpensesPage() {
                   value={formData.amount}
                   onChange={(e) => setFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
                   placeholder="100.00"
+                  required
                 />
               </div>
               
@@ -707,6 +623,26 @@ export default function ExpensesPage() {
                   onChange={(e) => setFormData(prev => ({ ...prev, tax_amount: parseFloat(e.target.value) || 0 }))}
                   placeholder="12.50"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="payment_method">Payment Method</Label>
+                <Select
+                  value={formData.payment_method}
+                  onValueChange={(value: Expense['payment_method']) => 
+                    setFormData(prev => ({ ...prev, payment_method: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="company_card">Company Card</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
@@ -738,7 +674,7 @@ export default function ExpensesPage() {
             </Button>
             <Button 
               onClick={handleCreateExpense} 
-              disabled={modalLoading || !formData.employee_name || !formData.description}
+              disabled={modalLoading || !formData.employee_id || !formData.description || formData.amount <= 0}
             >
               {modalLoading ? 'Creating...' : 'Create Expense'}
             </Button>
@@ -766,14 +702,22 @@ export default function ExpensesPage() {
               </div>
               
               <div>
-                <Label htmlFor="edit_employee_name">Employee Name *</Label>
-                <Input
-                  id="edit_employee_name"
-                  value={formData.employee_name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, employee_name: e.target.value }))}
-                  placeholder="John Doe"
-                  required
-                />
+                <Label htmlFor="edit_employee_id">Employee *</Label>
+                <Select
+                  value={formData.employee_id}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, employee_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(employees as Employee[])?.map(employee => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.first_name} {employee.last_name} - {employee.employee_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
@@ -869,7 +813,7 @@ export default function ExpensesPage() {
             </Button>
             <Button 
               onClick={handleSaveEdit} 
-              disabled={modalLoading || !formData.employee_name || !formData.description}
+              disabled={modalLoading || !formData.employee_id || !formData.description || formData.amount <= 0}
             >
               {modalLoading ? 'Updating...' : 'Update Expense'}
             </Button>
@@ -897,7 +841,15 @@ export default function ExpensesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Employee</Label>
-                  <p className="font-medium">{currentExpense.employee_name}</p>
+                  <p className="font-medium">
+                    {currentExpense.employee_id 
+                      ? (() => {
+                          const employee = (employees as Employee[])?.find(emp => emp.id === currentExpense.employee_id);
+                          return employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown Employee';
+                        })()
+                      : 'No Employee Assigned'
+                    }
+                  </p>
                 </div>
                 <div>
                   <Label>Category</Label>

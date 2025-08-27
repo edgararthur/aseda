@@ -120,6 +120,15 @@ interface LedgerLinkDB extends DBSchema {
       organization_id: string;
     };
   };
+  // Cache of last successful fetch per table + organization
+  cache: {
+    key: string; // `${table}:${organization_id}`
+    value: {
+      key: string;
+      data: any[];
+      updated_at: string;
+    };
+  };
   sync_queue: {
     key: string;
     value: {
@@ -147,6 +156,7 @@ class OfflineStorage {
   private syncInProgress: boolean = false;
 
   async init() {
+    if (this.db) return; // prevent re-init
     this.db = await openDB<LedgerLinkDB>('ledgerlink-db', 1, {
       upgrade(db) {
         // Create object stores
@@ -191,6 +201,10 @@ class OfflineStorage {
           employeeStore.createIndex('synced', 'synced');
         }
 
+        if (!db.objectStoreNames.contains('cache')) {
+          db.createObjectStore('cache', { keyPath: 'key' });
+        }
+
         if (!db.objectStoreNames.contains('sync_queue')) {
           db.createObjectStore('sync_queue', { keyPath: 'id' });
         }
@@ -207,6 +221,10 @@ class OfflineStorage {
 
     // Start periodic sync
     this.startPeriodicSync();
+  }
+
+  hasStore(store: keyof LedgerLinkDB | string): boolean {
+    return !!this.db && (this.db as any).objectStoreNames?.contains(store as string);
   }
 
   private handleOnline() {
@@ -317,10 +335,15 @@ class OfflineStorage {
   ): Promise<LedgerLinkDB[T]['value'][]> {
     if (!this.db) throw new Error('Database not initialized');
 
-    if (organizationId) {
-      return await this.db.getAllFromIndex(table, 'organization_id', organizationId);
+    if (organizationId && this.hasStore(table)) {
+      const indexed = await this.db.getAllFromIndex(table as any, 'organization_id', organizationId as any);
+      if (indexed.length > 0) return indexed as any;
     }
-    return await this.db.getAll(table);
+
+    // Fallback to cache snapshot for tables not in IDB schema
+    const cacheKey = `${String(table)}:${organizationId || 'all'}`;
+    const cached = await this.db.get('cache', cacheKey);
+    return (cached?.data as any[]) || [];
   }
 
   async getById<T extends keyof LedgerLinkDB>(
@@ -362,6 +385,57 @@ class OfflineStorage {
     };
 
     await this.db.put('sync_queue', queueItem);
+
+    await this.applyCacheMutation(table, operation, data);
+  }
+
+  async setCacheSnapshot(table: string, organizationId: string | 'all', records: any[]) {
+    if (!this.db) return;
+    const cacheKey = `${table}:${organizationId}`;
+    await this.db.put('cache', { key: cacheKey, data: records, updated_at: new Date().toISOString() });
+  }
+
+  async applyCacheMutation(
+    table: string,
+    operation: 'create' | 'update' | 'delete',
+    data: any
+  ) {
+    if (!this.db) return;
+    const orgId = data?.organization_id || 'all';
+    const cacheKey = `${table}:${orgId}`;
+    const existing = (await this.db.get('cache', cacheKey)) as any;
+    let nextData: any[] = existing?.data || [];
+    if (operation === 'create') {
+      nextData = [data, ...nextData];
+    } else if (operation === 'update') {
+      nextData = nextData.map((r) => (r.id === data.id ? { ...r, ...data } : r));
+    } else if (operation === 'delete') {
+      nextData = nextData.filter((r) => r.id !== data.id);
+    }
+    await this.db.put('cache', { key: cacheKey, data: nextData, updated_at: new Date().toISOString() });
+  }
+
+  // Lightweight public queue helpers for generic tables
+  async queueCreate(table: string, data: any) {
+    const id = data.id || this.generateId();
+    const record = { ...data, id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), synced: false };
+    await this.addToSyncQueue(table, 'create', record);
+    if (this.isOnline) this.triggerSync();
+    return record;
+  }
+
+  async queueUpdate(table: string, id: string, patch: any) {
+    const record = { ...patch, id, updated_at: new Date().toISOString(), synced: false };
+    await this.addToSyncQueue(table, 'update', record);
+    if (this.isOnline) this.triggerSync();
+    return record;
+  }
+
+  async queueDelete(table: string, id: string, organizationId?: string) {
+    const payload = { id, organization_id: organizationId || 'all' };
+    await this.addToSyncQueue(table, 'delete', payload);
+    if (this.isOnline) this.triggerSync();
+    return true;
   }
 
   private async triggerSync(): Promise<void> {
@@ -395,9 +469,8 @@ class OfflineStorage {
   }
 
   private async syncItem(item: any): Promise<void> {
-    // This would integrate with your Supabase client
-    // For now, we'll simulate the sync
-    const { supabase } = await import('./supabase');
+    // Integrate with Supabase client
+    const supabase = (await import('./supabase')).default;
 
     switch (item.operation) {
       case 'create':
