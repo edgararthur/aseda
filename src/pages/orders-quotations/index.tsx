@@ -67,7 +67,7 @@ interface OrderQuotationStats {
 
 interface OrderQuotationFormData {
   type: 'quotation' | 'order';
-  customer_id: string;
+  customer_name: string; // Changed from customer_id to customer_name
   valid_until: string;
   delivery_date: string;
   subtotal: number;
@@ -101,7 +101,7 @@ export default function OrdersQuotationsPage() {
   // Form data for creating/editing items
   const [formData, setFormData] = useState<OrderQuotationFormData>({
     type: 'quotation',
-    customer_id: '',
+    customer_name: '',
     valid_until: '',
     delivery_date: '',
     subtotal: 0,
@@ -294,7 +294,7 @@ export default function OrdersQuotationsPage() {
     setCurrentItem(item);
     setFormData({
       type: item.type,
-      customer_id: item.customer_id,
+      customer_name: item.customer_name,
       valid_until: item.valid_until || '',
       delivery_date: item.delivery_date || '',
       subtotal: item.subtotal,
@@ -355,8 +355,8 @@ export default function OrdersQuotationsPage() {
       setLoading(true);
       
       // Validation
-      if (!formData.customer_id) {
-        toast.error('Please select a customer');
+      if (!formData.customer_name.trim()) {
+        toast.error('Please enter a customer name');
         return;
       }
 
@@ -365,17 +365,15 @@ export default function OrdersQuotationsPage() {
         return;
       }
 
-      const selectedContact = (contacts as Contact[])?.find(c => c.id === formData.customer_id);
-
       // TODO: Implement actual creation/update when we have dedicated table
       const newItem: OrderQuotation = {
         id: currentItem?.id || `${formData.type}-${Date.now()}`,
         number: currentItem?.number || `${formData.type === 'quotation' ? 'QUO' : 'ORD'}-${String(items.length + 1).padStart(4, '0')}`,
         type: formData.type,
-        customer_id: formData.customer_id,
-        customer_name: selectedContact?.name || 'Unknown Customer',
-        customer_email: selectedContact?.email || '',
-        customer_phone: selectedContact?.phone || '',
+        customer_id: '', // No longer using customer_id
+        customer_name: formData.customer_name,
+        customer_email: '', // No longer auto-filled from contacts
+        customer_phone: '',
         issue_date: new Date().toISOString().split('T')[0],
         valid_until: formData.type === 'quotation' ? formData.valid_until : undefined,
         delivery_date: formData.type === 'order' ? formData.delivery_date : undefined,
@@ -411,7 +409,7 @@ export default function OrdersQuotationsPage() {
   const resetForm = () => {
     setFormData({
       type: 'quotation',
-      customer_id: '',
+      customer_name: '',
       valid_until: '',
       delivery_date: '',
       subtotal: 0,
@@ -582,21 +580,11 @@ export default function OrdersQuotationsPage() {
 
               <div>
                 <Label htmlFor="customer_id">Customer *</Label>
-                <Select 
-                  value={formData.customer_id} 
-                  onValueChange={(value) => handleInputChange('customer_id', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(contacts as Contact[])?.map(contact => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.name} - {contact.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value={formData.customer_name}
+                  onChange={(e) => handleInputChange('customer_name', e.target.value)}
+                  placeholder="Enter customer name"
+                />
               </div>
 
               {formData.type === 'quotation' && (
@@ -699,21 +687,11 @@ export default function OrdersQuotationsPage() {
 
               <div>
                 <Label htmlFor="customer_id">Customer *</Label>
-                <Select 
-                  value={formData.customer_id} 
-                  onValueChange={(value) => handleInputChange('customer_id', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(contacts as Contact[])?.map(contact => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.name} - {contact.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value={formData.customer_name}
+                  onChange={(e) => handleInputChange('customer_name', e.target.value)}
+                  placeholder="Enter customer name"
+                />
               </div>
 
               {formData.type === 'quotation' && (

@@ -2,6 +2,18 @@
 -- This script addresses all CRUD operation issues by creating missing tables and fixing schema mismatches
 
 -- ============================================================================
+-- 0. UPDATE EXISTING TABLES FOR MANUAL INPUTS
+-- ============================================================================
+
+-- Add missing columns to expenses table if it exists
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'expenses') THEN
+        ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS employee_name text DEFAULT '';
+    END IF;
+END $$;
+
+-- ============================================================================
 -- 1. FIX CONTACTS TABLE
 -- ============================================================================
 -- The application expects contacts table with specific fields
@@ -135,6 +147,7 @@ ADD COLUMN IF NOT EXISTS email text,
 ADD COLUMN IF NOT EXISTS phone text,
 ADD COLUMN IF NOT EXISTS job_title text,
 ADD COLUMN IF NOT EXISTS department_id uuid,
+ADD COLUMN IF NOT EXISTS department_name text DEFAULT '',
 ADD COLUMN IF NOT EXISTS salary numeric DEFAULT 0,
 ADD COLUMN IF NOT EXISTS hourly_rate numeric DEFAULT 0,
 ADD COLUMN IF NOT EXISTS address text,

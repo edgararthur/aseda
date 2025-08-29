@@ -73,7 +73,7 @@ export default function EmployeesPage() {
     phone: '',
     hire_date: new Date().toISOString().split('T')[0],
     job_title: '',
-    department_id: '',
+    department_name: '', // Changed from department_id to department_name
     salary: 0,
     hourly_rate: 0,
     status: 'active' as 'active' | 'inactive' | 'terminated',
@@ -118,7 +118,7 @@ export default function EmployeesPage() {
       render: (value) => value || 'Not specified'
     },
     {
-      key: 'department_id',
+      key: 'department_name',
       label: 'Department',
       render: (value) => value || 'Unassigned'
     },
@@ -158,7 +158,7 @@ export default function EmployeesPage() {
       phone: '',
       hire_date: new Date().toISOString().split('T')[0],
       job_title: '',
-      department_id: '',
+      department_name: '', // Changed from department_id to department_name
       salary: 0,
       hourly_rate: 0,
       status: 'active',
@@ -195,7 +195,7 @@ export default function EmployeesPage() {
       phone: employee.phone || '',
       hire_date: employee.hire_date,
       job_title: employee.job_title || '',
-      department_id: employee.department_id || '',
+      department_name: employee.department_name || '',
       salary: employee.salary,
       hourly_rate: employee.hourly_rate,
       status: employee.status,
@@ -284,9 +284,9 @@ export default function EmployeesPage() {
       });
       toast.success('Department created successfully');
       
-      // Auto-select the newly created department
+      // Auto-fill the newly created department name
       if (result.data) {
-        setFormData(prev => ({ ...prev, department_id: result.data.id }));
+        setFormData(prev => ({ ...prev, department_name: result.data.name }));
       }
     } catch (error) {
       console.error('Error creating department:', error);
@@ -502,40 +502,13 @@ export default function EmployeesPage() {
                 </div>
                 
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label htmlFor="department_id">Department</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsDepartmentModalOpen(true)}
-                      className="text-xs"
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add Department
-                    </Button>
-                  </div>
-                  <Select
-                    value={formData.department_id}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, department_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(departments as any[])?.length === 0 ? (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          No departments found. Click "Add Department" to create one.
-                        </div>
-                      ) : (
-                        (departments as any[])?.map(dept => (
-                          <SelectItem key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="department_name">Department Name</Label>
+                  <Input
+                    id="department_name"
+                    value={formData.department_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, department_name: e.target.value }))}
+                    placeholder="Enter department name"
+                  />
                 </div>
                 
                 <div>
@@ -770,40 +743,13 @@ export default function EmployeesPage() {
                 </div>
                 
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label htmlFor="edit_department_id">Department</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsDepartmentModalOpen(true)}
-                      className="text-xs"
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add Department
-                    </Button>
-                  </div>
-                  <Select
-                    value={formData.department_id}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, department_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(departments as any[])?.length === 0 ? (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          No departments found. Click "Add Department" to create one.
-                        </div>
-                      ) : (
-                        (departments as any[])?.map(dept => (
-                          <SelectItem key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="edit_department_name">Department Name</Label>
+                  <Input
+                    id="edit_department_name"
+                    value={formData.department_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, department_name: e.target.value }))}
+                    placeholder="Enter department name"
+                  />
                 </div>
                 
                 <div>

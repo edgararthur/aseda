@@ -66,6 +66,7 @@ interface Employee {
   hire_date: string;
   job_title?: string;
   department_id?: string;
+  department_name?: string; // Added for manual department input
   salary: number;
   hourly_rate: number;
   status: 'active' | 'inactive' | 'terminated';
@@ -240,6 +241,7 @@ interface Expense {
   organization_id: string;
   expense_number: string;
   employee_id?: string;
+  employee_name?: string; // Added for manual employee input
   category: 'travel' | 'meals' | 'office_supplies' | 'utilities' | 'rent' | 'marketing' | 'professional_services' | 'other';
   description: string;
   amount: number;

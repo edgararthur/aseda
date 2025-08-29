@@ -80,7 +80,7 @@ export default function ExpensesPage() {
   // Form data
   const [formData, setFormData] = useState({
     expense_number: '',
-    employee_id: '',
+    employee_name: '', // Changed from employee_id to employee_name
     category: 'other' as Expense['category'],
     description: '',
     amount: 0,
@@ -114,17 +114,13 @@ export default function ExpensesPage() {
       )
     },
     {
-      key: 'employee_id',
+      key: 'employee_name',
       label: 'Employee',
-      render: (value, row) => {
-        const employee = (employees as Employee[])?.find(emp => emp.id === value);
-        return (
+      render: (value) => (
         <div>
-            <div className="font-medium">{employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown Employee'}</div>
-            <div className="text-sm text-gray-500">{employee?.employee_number || 'N/A'}</div>
+          <div className="font-medium">{value || 'No Employee Assigned'}</div>
         </div>
-        );
-      }
+      )
     },
     {
       key: 'category',
@@ -219,7 +215,7 @@ export default function ExpensesPage() {
       // Prepare expense data
       const expenseData = {
         expense_number: formData.expense_number || generateExpenseNumber(),
-        employee_id: formData.employee_id || null,
+        employee_name: formData.employee_name,
         category: formData.category,
         description: formData.description,
         amount: formData.amount,
@@ -297,7 +293,7 @@ export default function ExpensesPage() {
   const resetForm = () => {
     setFormData({
       expense_number: '',
-      employee_id: '',
+      employee_name: '', // Changed from employee_id to employee_name
       category: 'other',
       description: '',
       amount: 0,
@@ -531,22 +527,13 @@ export default function ExpensesPage() {
               </div>
               
               <div>
-                <Label htmlFor="employee_id">Employee *</Label>
-                <Select
-                  value={formData.employee_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, employee_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(employees as Employee[])?.map(employee => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.first_name} {employee.last_name} - {employee.employee_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="employee_name">Employee Name *</Label>
+                <Input
+                  id="employee_name"
+                  value={formData.employee_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, employee_name: e.target.value }))}
+                  placeholder="Enter employee name"
+                />
               </div>
             </div>
             
@@ -674,7 +661,7 @@ export default function ExpensesPage() {
             </Button>
             <Button 
               onClick={handleCreateExpense} 
-              disabled={modalLoading || !formData.employee_id || !formData.description || formData.amount <= 0}
+              disabled={modalLoading || !formData.employee_name.trim() || !formData.description || formData.amount <= 0}
             >
               {modalLoading ? 'Creating...' : 'Create Expense'}
             </Button>
@@ -704,8 +691,8 @@ export default function ExpensesPage() {
               <div>
                 <Label htmlFor="edit_employee_id">Employee *</Label>
                 <Select
-                  value={formData.employee_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, employee_id: value }))}
+                  value={formData.employee_name}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, employee_name: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select employee" />
@@ -813,7 +800,7 @@ export default function ExpensesPage() {
             </Button>
             <Button 
               onClick={handleSaveEdit} 
-              disabled={modalLoading || !formData.employee_id || !formData.description || formData.amount <= 0}
+              disabled={modalLoading || !formData.employee_name.trim() || !formData.description || formData.amount <= 0}
             >
               {modalLoading ? 'Updating...' : 'Update Expense'}
             </Button>
@@ -842,13 +829,7 @@ export default function ExpensesPage() {
                 <div>
                   <Label>Employee</Label>
                   <p className="font-medium">
-                    {currentExpense.employee_id 
-                      ? (() => {
-                          const employee = (employees as Employee[])?.find(emp => emp.id === currentExpense.employee_id);
-                          return employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown Employee';
-                        })()
-                      : 'No Employee Assigned'
-                    }
+                    {currentExpense.employee_name || 'No Employee Assigned'}
                   </p>
                 </div>
                 <div>

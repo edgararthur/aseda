@@ -38,8 +38,7 @@ import { toast } from 'sonner';
 // Invoice line item interface
 interface InvoiceLineItem {
     id: string;
-  product_id: string;
-  product_name: string;
+  product_name: string; // Changed from product_id to product_name for manual input
   description: string;
   quantity: number;
   unit_price: number;
@@ -155,7 +154,6 @@ export default function InvoicesPage() {
   const addLineItem = () => {
     const newItem: InvoiceLineItem = {
       id: `temp-${Date.now()}`,
-      product_id: '',
       product_name: '',
       description: '',
       quantity: 1,
@@ -186,18 +184,7 @@ export default function InvoicesPage() {
         if (item.id === id) {
           const updatedItem = { ...item, ...updates };
           
-          // If product is selected, auto-fill details
-          if (updates.product_id && products) {
-            const product = (products as Product[]).find(p => p.id === updates.product_id);
-            if (product) {
-              updatedItem.product_name = product.name;
-              updatedItem.description = product.description || '';
-              updatedItem.unit_price = product.sales_price || 0;
-              updatedItem.tax_rate = product.tax_rate || 0;
-            }
-          }
-
-          // Recalculate line total
+          // Recalculate line total when quantity or unit_price changes
           updatedItem.line_total = updatedItem.quantity * updatedItem.unit_price;
           
           return updatedItem;
@@ -273,7 +260,7 @@ export default function InvoicesPage() {
         payment_terms: formData.payment_terms,
         currency: 'GHS',
         line_items: formData.line_items.map(item => ({
-          product_id: item.product_id || null,
+          product_name: item.product_name,
           description: item.description,
           quantity: item.quantity,
           unit_price: item.unit_price,
@@ -800,21 +787,12 @@ export default function InvoicesPage() {
                     {formData.line_items.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell>
-                          <Select
-                            value={item.product_id}
-                            onValueChange={(value) => updateLineItem(item.id, { product_id: value })}
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue placeholder="Select product" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(products as Product[])?.map(product => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            value={item.product_name}
+                            onChange={(e) => updateLineItem(item.id, { product_name: e.target.value })}
+                            placeholder="Enter product name"
+                            className="w-40"
+                          />
                         </TableCell>
                         <TableCell>
                           <Input

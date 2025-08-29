@@ -93,7 +93,7 @@ interface SalesReturnStats {
 }
 
 interface SalesReturnFormData {
-  original_invoice_id: string;
+  original_invoice_number: string; // Changed from original_invoice_id to original_invoice_number
   reason: string;
   refund_method: string;
   notes: string;
@@ -137,7 +137,7 @@ export default function SalesReturnsPage() {
 
   // Form data for creating/editing returns
   const [formData, setFormData] = useState<SalesReturnFormData>({
-    original_invoice_id: '',
+    original_invoice_number: '',
     reason: 'customer_request',
     refund_method: 'original_payment',
     notes: '',
@@ -328,16 +328,7 @@ export default function SalesReturnsPage() {
     }));
   };
 
-  // Handle invoice selection
-  const handleInvoiceSelect = (invoiceId: string) => {
-    const invoice = (invoices as Invoice[]).find(inv => inv.id === invoiceId);
-    setSelectedInvoice(invoice || null);
-    setFormData(prev => ({
-      ...prev,
-      original_invoice_id: invoiceId,
-      return_items: [] // Reset items when invoice changes
-    }));
-  };
+  // Note: handleInvoiceSelect removed since we're using manual input now
 
   const columns: Column[] = [
     {
@@ -505,8 +496,8 @@ export default function SalesReturnsPage() {
       setLoading(true);
       
       // Validation
-      if (!formData.original_invoice_id) {
-        toast.error('Please select an original invoice');
+      if (!formData.original_invoice_number.trim()) {
+        toast.error('Please enter the original invoice number');
         return;
       }
 
@@ -526,8 +517,7 @@ export default function SalesReturnsPage() {
       const newReturn: SalesReturn = {
         id: currentReturn?.id || `return-${Date.now()}`,
         return_number: currentReturn?.return_number || generateReturnNumber(),
-        original_invoice_id: formData.original_invoice_id,
-        original_invoice_number: selectedInvoice?.invoice_number || 'INV-0001',
+        original_invoice_number: formData.original_invoice_number,
         customer_id: customer?.id || '',
         customer_name: customer?.name || 'Unknown Customer',
         customer_email: customer?.email || '',
@@ -592,7 +582,7 @@ export default function SalesReturnsPage() {
 
   const resetForm = () => {
     setFormData({
-      original_invoice_id: '',
+      original_invoice_number: '',
       reason: 'customer_request',
       refund_method: 'original_payment',
       notes: '',
@@ -797,25 +787,13 @@ export default function SalesReturnsPage() {
             {/* Return Header */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="original_invoice_id">Original Invoice *</Label>
-                <Select 
-                  value={formData.original_invoice_id} 
-                  onValueChange={handleInvoiceSelect}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select invoice" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(invoices as Invoice[])?.filter(inv => inv.status === 'paid').map(invoice => {
-                      const customer = (contacts as Contact[])?.find(c => c.id === invoice.contact_id);
-                      return (
-                        <SelectItem key={invoice.id} value={invoice.id}>
-                          {invoice.invoice_number} - {customer?.name} - <CurrencyCell amount={invoice.total_amount} />
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="original_invoice_number">Original Invoice Number *</Label>
+                <Input
+                  id="original_invoice_number"
+                  value={formData.original_invoice_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, original_invoice_number: e.target.value }))}
+                  placeholder="Enter original invoice number"
+                />
               </div>
 
               <div>
@@ -1066,25 +1044,13 @@ export default function SalesReturnsPage() {
             {/* Return Header */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="original_invoice_id">Original Invoice *</Label>
-                <Select 
-                  value={formData.original_invoice_id} 
-                  onValueChange={handleInvoiceSelect}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select invoice" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(invoices as Invoice[])?.filter(inv => inv.status === 'paid').map(invoice => {
-                      const customer = (contacts as Contact[])?.find(c => c.id === invoice.contact_id);
-                      return (
-                        <SelectItem key={invoice.id} value={invoice.id}>
-                          {invoice.invoice_number} - {customer?.name} - <CurrencyCell amount={invoice.total_amount} />
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="original_invoice_number">Original Invoice Number *</Label>
+                <Input
+                  id="original_invoice_number"
+                  value={formData.original_invoice_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, original_invoice_number: e.target.value }))}
+                  placeholder="Enter original invoice number"
+                />
               </div>
 
               <div>
