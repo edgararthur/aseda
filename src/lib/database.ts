@@ -14,6 +14,7 @@ interface Invoice {
   id: string;
   organization_id: string;
   contact_id: string | null;
+  customer_name: string; // Added customer_name field
   invoice_number: string;
   issue_date: string;
   due_date: string;
@@ -619,6 +620,7 @@ export class InvoiceService {
       const dbInvoiceData = {
         organization_id: organizationId,
         contact_id: invoiceData.contact_id || null,
+        customer_name: invoiceData.customer_name || '',
         invoice_number: invoiceData.invoice_number,
         issue_date: invoiceData.issue_date,
         due_date: invoiceData.due_date,

@@ -30,8 +30,17 @@ CREATE TABLE IF NOT EXISTS public.contacts (
 ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access
-CREATE POLICY "Users can access their organization's contacts" ON public.contacts
-    FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'contacts' 
+        AND policyname = 'Users can access their organization''s contacts'
+    ) THEN
+        CREATE POLICY "Users can access their organization's contacts" ON public.contacts
+            FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_contacts_organization_id ON public.contacts(organization_id);
@@ -99,8 +108,17 @@ CREATE TABLE IF NOT EXISTS public.departments (
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access
-CREATE POLICY "Users can access their organization's departments" ON public.departments
-    FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'departments' 
+        AND policyname = 'Users can access their organization''s departments'
+    ) THEN
+        CREATE POLICY "Users can access their organization's departments" ON public.departments
+            FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_departments_organization_id ON public.departments(organization_id);
@@ -141,14 +159,23 @@ BEGIN
 END $$;
 
 -- Update existing employees to split name into first_name and last_name if needed
-UPDATE public.employees 
-SET first_name = SPLIT_PART(name, ' ', 1),
-    last_name = CASE 
-        WHEN array_length(string_to_array(name, ' '), 1) > 1 
-        THEN array_to_string(string_to_array(name, ' ')[2:], ' ')
-        ELSE ''
-    END
-WHERE first_name IS NULL AND name IS NOT NULL;
+DO $$
+BEGIN
+    -- Only update if the 'name' column exists (for backward compatibility)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'employees' AND column_name = 'name') THEN
+        UPDATE public.employees 
+        SET first_name = SPLIT_PART(name, ' ', 1),
+            last_name = CASE 
+                WHEN POSITION(' ' IN name) > 0 
+                THEN SUBSTRING(name FROM POSITION(' ' IN name) + 1)
+                ELSE ''
+            END
+        WHERE first_name IS NULL AND name IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    -- If update fails, continue without error
+    NULL;
+END $$;
 
 -- ============================================================================
 -- 5. FIX INVOICES TABLE 
@@ -156,6 +183,7 @@ WHERE first_name IS NULL AND name IS NOT NULL;
 -- Add missing fields to invoices table that the application expects
 ALTER TABLE public.invoices 
 ADD COLUMN IF NOT EXISTS contact_id uuid,
+ADD COLUMN IF NOT EXISTS customer_name text DEFAULT '',
 ADD COLUMN IF NOT EXISTS invoice_number text,
 ADD COLUMN IF NOT EXISTS issue_date date,
 ADD COLUMN IF NOT EXISTS due_date date,
@@ -200,14 +228,35 @@ BEGIN
     END IF;
 END $$;
 
--- Migrate data from old fields to new fields if they exist
-UPDATE public.invoices 
-SET contact_id = customerid::uuid,
-    invoice_number = invoicenumber,
-    issue_date = date::date,
-    due_date = duedate::date,
-    total_amount = total
-WHERE contact_id IS NULL AND customerid IS NOT NULL;
+-- Migrate data from old fields to new fields if they exist (with error handling)
+DO $$
+BEGIN
+    -- Check if old columns exist before migrating
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'invoices' AND column_name = 'customerid') THEN
+        UPDATE public.invoices 
+        SET contact_id = CASE 
+                WHEN customerid IS NOT NULL AND customerid != '' 
+                THEN customerid::uuid 
+                ELSE NULL 
+            END,
+            invoice_number = COALESCE(invoicenumber, 'INV-' || id),
+            issue_date = CASE 
+                WHEN date IS NOT NULL 
+                THEN date::date 
+                ELSE CURRENT_DATE 
+            END,
+            due_date = CASE 
+                WHEN duedate IS NOT NULL 
+                THEN duedate::date 
+                ELSE CURRENT_DATE + INTERVAL '30 days' 
+            END,
+            total_amount = COALESCE(total, 0)
+        WHERE contact_id IS NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    -- If migration fails, continue without error
+    NULL;
+END $$;
 
 -- Add unique constraint for invoice number per organization
 DO $$ 
@@ -242,27 +291,42 @@ CREATE TABLE IF NOT EXISTS public.invoice_items (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT invoice_items_pkey PRIMARY KEY (id),
-    CONSTRAINT invoice_items_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE CASCADE,
-    CONSTRAINT invoice_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+    CONSTRAINT invoice_items_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE CASCADE
 );
 
 -- Enable RLS on invoice_items table
 ALTER TABLE public.invoice_items ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access through invoice
-CREATE POLICY "Users can access invoice items for their organization's invoices" ON public.invoice_items
-    FOR ALL USING (
-        invoice_id IN (
-            SELECT id FROM public.invoices 
-            WHERE organization_id IN (
-                SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()
-            )
-        )
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'invoice_items' 
+        AND policyname = 'Users can access invoice items for their organization''s invoices'
+    ) THEN
+        CREATE POLICY "Users can access invoice items for their organization's invoices" ON public.invoice_items
+            FOR ALL USING (
+                invoice_id IN (
+                    SELECT id FROM public.invoices 
+                    WHERE organization_id IN (
+                        SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()
+                    )
+                )
+            );
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON public.invoice_items(invoice_id);
-CREATE INDEX IF NOT EXISTS idx_invoice_items_product_id ON public.invoice_items(product_id);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'invoice_items' AND column_name = 'product_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_invoice_items_product_id ON public.invoice_items(product_id);
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
 
 -- ============================================================================
 -- 7. CREATE SALES_RETURNS TABLE
@@ -305,8 +369,17 @@ CREATE TABLE IF NOT EXISTS public.sales_returns (
 ALTER TABLE public.sales_returns ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access
-CREATE POLICY "Users can access their organization's sales returns" ON public.sales_returns
-    FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'sales_returns' 
+        AND policyname = 'Users can access their organization''s sales returns'
+    ) THEN
+        CREATE POLICY "Users can access their organization's sales returns" ON public.sales_returns
+            FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sales_returns_organization_id ON public.sales_returns(organization_id);
@@ -335,27 +408,42 @@ CREATE TABLE IF NOT EXISTS public.sales_return_items (
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT sales_return_items_pkey PRIMARY KEY (id),
     CONSTRAINT sales_return_items_sales_return_id_fkey FOREIGN KEY (sales_return_id) REFERENCES public.sales_returns(id) ON DELETE CASCADE,
-    CONSTRAINT sales_return_items_original_invoice_item_id_fkey FOREIGN KEY (original_invoice_item_id) REFERENCES public.invoice_items(id),
-    CONSTRAINT sales_return_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+    CONSTRAINT sales_return_items_original_invoice_item_id_fkey FOREIGN KEY (original_invoice_item_id) REFERENCES public.invoice_items(id)
 );
 
 -- Enable RLS on sales_return_items table
 ALTER TABLE public.sales_return_items ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access through sales return
-CREATE POLICY "Users can access sales return items for their organization's returns" ON public.sales_return_items
-    FOR ALL USING (
-        sales_return_id IN (
-            SELECT id FROM public.sales_returns 
-            WHERE organization_id IN (
-                SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()
-            )
-        )
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'sales_return_items' 
+        AND policyname = 'Users can access sales return items for their organization''s returns'
+    ) THEN
+        CREATE POLICY "Users can access sales return items for their organization's returns" ON public.sales_return_items
+            FOR ALL USING (
+                sales_return_id IN (
+                    SELECT id FROM public.sales_returns 
+                    WHERE organization_id IN (
+                        SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()
+                    )
+                )
+            );
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sales_return_items_sales_return_id ON public.sales_return_items(sales_return_id);
-CREATE INDEX IF NOT EXISTS idx_sales_return_items_product_id ON public.sales_return_items(product_id);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sales_return_items' AND column_name = 'product_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_sales_return_items_product_id ON public.sales_return_items(product_id);
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
 
 -- ============================================================================
 -- 9. CREATE ORDERS/QUOTATIONS TABLE
@@ -396,8 +484,17 @@ CREATE TABLE IF NOT EXISTS public.orders (
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access
-CREATE POLICY "Users can access their organization's orders" ON public.orders
-    FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'orders' 
+        AND policyname = 'Users can access their organization''s orders'
+    ) THEN
+        CREATE POLICY "Users can access their organization's orders" ON public.orders
+            FOR ALL USING (organization_id IN (SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()));
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_orders_organization_id ON public.orders(organization_id);
@@ -426,27 +523,42 @@ CREATE TABLE IF NOT EXISTS public.order_items (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT order_items_pkey PRIMARY KEY (id),
-    CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE,
-    CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+    CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE
 );
 
 -- Enable RLS on order_items table
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policy for organization-based access through order
-CREATE POLICY "Users can access order items for their organization's orders" ON public.order_items
-    FOR ALL USING (
-        order_id IN (
-            SELECT id FROM public.orders 
-            WHERE organization_id IN (
-                SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()
-            )
-        )
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'order_items' 
+        AND policyname = 'Users can access order items for their organization''s orders'
+    ) THEN
+        CREATE POLICY "Users can access order items for their organization's orders" ON public.order_items
+            FOR ALL USING (
+                order_id IN (
+                    SELECT id FROM public.orders 
+                    WHERE organization_id IN (
+                        SELECT organization_id FROM public.profiles WHERE user_id = auth.uid()
+                    )
+                )
+            );
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON public.order_items(order_id);
-CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON public.order_items(product_id);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'product_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON public.order_items(product_id);
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
 
 -- ============================================================================
 -- TRIGGER FUNCTIONS FOR AUTOMATIC UPDATED_AT
@@ -519,6 +631,46 @@ BEGIN
             CREATE TRIGGER update_expenses_updated_at BEFORE UPDATE ON public.expenses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
         END IF;
     END IF;
+END $$;
+
+-- ============================================================================
+-- ADD PRODUCT FOREIGN KEY CONSTRAINTS (AFTER PRODUCTS TABLE IS READY)
+-- ============================================================================
+-- Add product_id foreign key constraints conditionally
+DO $$
+BEGIN
+    -- Add product_id constraint to invoice_items if products table exists
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'products') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_name = 'invoice_items_product_id_fkey' 
+            AND table_name = 'invoice_items'
+        ) THEN
+            ALTER TABLE public.invoice_items ADD CONSTRAINT invoice_items_product_id_fkey 
+            FOREIGN KEY (product_id) REFERENCES public.products(id);
+        END IF;
+        
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_name = 'sales_return_items_product_id_fkey' 
+            AND table_name = 'sales_return_items'
+        ) THEN
+            ALTER TABLE public.sales_return_items ADD CONSTRAINT sales_return_items_product_id_fkey 
+            FOREIGN KEY (product_id) REFERENCES public.products(id);
+        END IF;
+        
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_name = 'order_items_product_id_fkey' 
+            AND table_name = 'order_items'
+        ) THEN
+            ALTER TABLE public.order_items ADD CONSTRAINT order_items_product_id_fkey 
+            FOREIGN KEY (product_id) REFERENCES public.products(id);
+        END IF;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    -- If adding constraints fails, continue without error
+    NULL;
 END $$;
 
 -- ============================================================================

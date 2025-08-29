@@ -50,7 +50,7 @@ interface InvoiceLineItem {
 // Complete invoice form data
 interface InvoiceFormData {
   invoice_number: string;
-  contact_id: string;
+  customer_name: string; // Changed from contact_id to customer_name
   issue_date: string;
     due_date: string;
   status: 'draft' | 'sent' | 'paid' | 'overdue';
@@ -109,7 +109,7 @@ export default function InvoicesPage() {
   // Form data for creating/editing invoices
   const [formData, setFormData] = useState<InvoiceFormData>({
     invoice_number: '',
-    contact_id: '',
+    customer_name: '',
     issue_date: new Date().toISOString().split('T')[0],
     due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     status: 'draft',
@@ -234,8 +234,8 @@ export default function InvoicesPage() {
             setLoading(true);
 
       // Validation
-      if (!formData.contact_id) {
-        toast.error('Please select a customer');
+      if (!formData.customer_name.trim()) {
+        toast.error('Please enter a customer name');
         return;
       }
 
@@ -262,7 +262,7 @@ export default function InvoicesPage() {
       // Create invoice data with proper mapping
       const invoiceData = {
         invoice_number: formData.invoice_number,
-        contact_id: formData.contact_id,
+        customer_name: formData.customer_name, // Use customer name instead of contact_id
         issue_date: formData.issue_date,
         due_date: formData.due_date,
         status: formData.status,
@@ -312,7 +312,7 @@ export default function InvoicesPage() {
     // Populate form with invoice data
     setFormData({
       invoice_number: invoice.invoice_number,
-      contact_id: invoice.contact_id || '',
+      customer_name: invoice.customer_name || '', // Use customer_name
       issue_date: invoice.issue_date,
       due_date: invoice.due_date,
       status: invoice.status as any,
@@ -369,7 +369,7 @@ export default function InvoicesPage() {
   const resetForm = () => {
     setFormData({
       invoice_number: '',
-      contact_id: '',
+      customer_name: '',
       issue_date: new Date().toISOString().split('T')[0],
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'draft',
@@ -577,7 +577,6 @@ export default function InvoicesPage() {
               </TableHeader>
               <TableBody>
                 {filteredInvoices.map((invoice) => {
-                  const customer = (contacts as Contact[])?.find(c => c.id === invoice.contact_id);
                   const isOverdue = new Date(invoice.due_date) < new Date() && invoice.status !== 'paid';
                   
                   return (
@@ -587,8 +586,7 @@ export default function InvoicesPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{customer?.name || 'Unknown Customer'}</div>
-                          <div className="text-sm text-muted-foreground">{customer?.email}</div>
+                          <div className="font-medium">{invoice.customer_name || 'Unknown Customer'}</div>
                         </div>
                       </TableCell>
                       <TableCell>{formatCurrency(invoice.total_amount || 0)}</TableCell>
@@ -707,22 +705,13 @@ export default function InvoicesPage() {
               </div>
               
               <div>
-                <Label htmlFor="contact_id">Customer *</Label>
-                <Select
-                  value={formData.contact_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, contact_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(contacts as Contact[])?.map(contact => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.name} - {contact.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="customer_name">Customer Name *</Label>
+                <Input
+                  id="customer_name"
+                  value={formData.customer_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                  placeholder="Enter customer name"
+                />
               </div>
               
               <div>
@@ -933,8 +922,8 @@ export default function InvoicesPage() {
             <div className="text-sm text-muted-foreground">
               {formData.line_items.length === 0 ? (
                 <span className="text-red-600">⚠️ Add at least one line item</span>
-              ) : !formData.contact_id ? (
-                <span className="text-red-600">⚠️ Select a customer</span>
+              ) : !formData.customer_name.trim() ? (
+                <span className="text-red-600">⚠️ Enter a customer name</span>
               ) : (
                 <span className="text-green-600">✅ Ready to create invoice</span>
               )}
@@ -945,7 +934,7 @@ export default function InvoicesPage() {
               </Button>
               <Button 
                 onClick={handleCreateInvoice} 
-                disabled={loading || formData.line_items.length === 0 || !formData.contact_id}
+                disabled={loading || formData.line_items.length === 0 || !formData.customer_name.trim()}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {loading ? (
@@ -981,7 +970,7 @@ export default function InvoicesPage() {
             <div>
               <Label>Customer</Label>
               <Input 
-                value={(contacts as Contact[])?.find(c => c.id === formData.contact_id)?.name || 'Unknown'} 
+                value={formData.customer_name || 'Unknown'} 
                 disabled 
               />
             </div>
@@ -1046,7 +1035,7 @@ export default function InvoicesPage() {
                 </div>
                 <div>
                   <Label>Customer</Label>
-                  <p>{(contacts as Contact[])?.find(c => c.id === currentInvoice.contact_id)?.name || 'Unknown Customer'}</p>
+                  <p>{currentInvoice.customer_name || 'Unknown Customer'}</p>
                 </div>
                 <div>
                   <Label>Total Amount</Label>
